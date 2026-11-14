@@ -33,8 +33,8 @@
     <properties>
         <xwiki.extension.name>LLM Index API</xwiki.extension.name>
         <xwiki.extension.category>api</xwiki.extension.category>
-        <!-- Measured 0.67 on 2026-11-14 (LLMAI-176 tests added); pinned with a small margin. -->
-        <xwiki.jacoco.instructionRatio>0.66</xwiki.jacoco.instructionRatio>
+        <!-- Measured 0.69 on 2026-11-15 (LLMAI-230 tests added); pinned with a small margin. -->
+        <xwiki.jacoco.instructionRatio>0.68</xwiki.jacoco.instructionRatio>
         <xwiki.extension.features>
           org.xwiki.contrib.llm:application-llm-index-api
         </xwiki.extension.features>

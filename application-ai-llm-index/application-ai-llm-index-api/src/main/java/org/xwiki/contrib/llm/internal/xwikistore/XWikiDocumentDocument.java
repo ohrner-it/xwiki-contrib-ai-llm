@@ -23,9 +23,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
-import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -35,9 +33,7 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Provider;
 
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.tika.Tika;
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.component.annotation.InstantiationStrategy;
@@ -49,13 +45,13 @@ import org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentIndexableXDOMBuild
 import org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentIndexableXDOMBuilder.PropertyValue;
 import org.xwiki.localization.ContextualLocalizationManager;
 import org.xwiki.mail.GeneralMailConfiguration;
+import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.EntityReferenceSerializer;
 import org.xwiki.rendering.block.XDOM;
 import org.xwiki.rendering.syntax.Syntax;
 import org.xwiki.rendering.syntax.SyntaxType;
 
 import com.xpn.xwiki.XWikiContext;
-import com.xpn.xwiki.doc.XWikiAttachment;
 import com.xpn.xwiki.doc.XWikiDocument;
 import com.xpn.xwiki.objects.BaseObject;
 import com.xpn.xwiki.objects.classes.BaseClass;
@@ -138,7 +134,11 @@ public class XWikiDocumentDocument implements Document
     @Inject
     private XWikiDocumentIndexableXDOMBuilder xdomBuilder;
 
-    private final Tika tika = new Tika();
+    @Inject
+    private XWikiDocumentAttachmentTexts attachmentTexts;
+
+    @Inject
+    private XWikiDocumentStoreHelper storeHelper;
 
     /**
      * Initialize this document. This method may be called once.
@@ -173,6 +173,17 @@ public class XWikiDocumentDocument implements Document
     public String getTitle()
     {
         return this.xWikiDocument.getRenderedTitle(Syntax.PLAIN_1_0, this.xWikiContextProvider.get());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>See {@link XWikiDocumentStoreHelper#getBreadcrumb(DocumentReference, String)}.</p>
+     */
+    @Override
+    public List<String> getBreadcrumb()
+    {
+        return this.storeHelper.getBreadcrumb(this.xWikiDocument.getDocumentReference(), getTitle());
     }
 
     @Override
@@ -255,7 +266,8 @@ public class XWikiDocumentDocument implements Document
             context.setDoc(this.xWikiDocument);
             List<ObjectSection> objectSections =
                 objects.stream().map(object -> getObjectSection(object, context)).toList();
-            return this.xdomBuilder.build(this.xWikiDocument, objectSections, getAttachmentTexts());
+            return this.xdomBuilder.build(this.xWikiDocument, objectSections,
+                this.attachmentTexts.get(this.xWikiDocument));
         } finally {
             context.setWikiId(previousWiki);
             context.setDoc(previousDocument);
@@ -279,29 +291,9 @@ public class XWikiDocumentDocument implements Document
         return new ObjectSection(indexableObject.heading(), properties);
     }
 
-    /**
-     * @return the text of the attachments of the page that have text, by file name, in the order of the page
-     */
-    private Map<String, String> getAttachmentTexts()
-    {
-        XWikiContext context = this.xWikiContextProvider.get();
-        Map<String, String> result = new LinkedHashMap<>();
-        for (XWikiAttachment attachment : this.xWikiDocument.getAttachmentList()) {
-            try {
-                String content = this.tika.parseToString(attachment.getContentInputStream(context));
-                if (StringUtils.isNotBlank(content)) {
-                    result.put(attachment.getFilename(), content);
-                }
-            } catch (Exception e) {
-                this.logger.warn("Failed to parse attachment content: {}", ExceptionUtils.getRootCauseMessage(e));
-            }
-        }
-        return result;
-    }
-
     private String getFormattedAttachments()
     {
-        return getAttachmentTexts().entrySet().stream()
+        return this.attachmentTexts.get(this.xWikiDocument).entrySet().stream()
             .map(attachment -> formatHeading(2, attachment.getKey()) + attachment.getValue())
             .collect(Collectors.joining(DELIMITER));
     }

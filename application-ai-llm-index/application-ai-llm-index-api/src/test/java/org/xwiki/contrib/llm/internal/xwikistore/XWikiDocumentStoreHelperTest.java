@@ -235,4 +235,41 @@ class XWikiDocumentStoreHelperTest
         assertTrue(exception.getMessage().contains(EXPECTED_STATEMENT));
         verify(this.query, never()).setLimit(-1);
     }
+
+    @Test
+    void breadcrumbOfASpaceHomePageEndsWithItsTitle()
+    {
+        when(this.context.getWikiId()).thenReturn("mywiki");
+        DocumentReference reference = new DocumentReference("mywiki", List.of("Projects", "Alpha"), "WebHome");
+
+        assertEquals(List.of("Projects", "Project Alpha"), this.helper.getBreadcrumb(reference, "Project Alpha"));
+    }
+
+    @Test
+    void breadcrumbOfATerminalPageContainsAllItsSpaces()
+    {
+        when(this.context.getWikiId()).thenReturn("mywiki");
+        DocumentReference reference = new DocumentReference("mywiki", List.of("Projects", "Alpha"), "Risks");
+
+        assertEquals(List.of("Projects", "Alpha", "Risks and budget"),
+            this.helper.getBreadcrumb(reference, "Risks and budget"));
+    }
+
+    @Test
+    void breadcrumbOfAPageWithoutTitleEndsWithItsName()
+    {
+        when(this.context.getWikiId()).thenReturn("mywiki");
+        DocumentReference reference = new DocumentReference("mywiki", List.of("Projects", "Alpha"), "WebHome");
+
+        assertEquals(List.of("Projects", "Alpha"), this.helper.getBreadcrumb(reference, " "));
+    }
+
+    @Test
+    void breadcrumbOfAPageOfAnotherWikiStartsWithTheWiki()
+    {
+        when(this.context.getWikiId()).thenReturn("xwiki");
+        DocumentReference reference = new DocumentReference("mywiki", List.of("Projects"), "WebHome");
+
+        assertEquals(List.of("mywiki", "Projects"), this.helper.getBreadcrumb(reference, "Projects"));
+    }
 }

@@ -106,4 +106,18 @@ class DefaultDocumentTest
 
         assertEquals(List.of(new RawBlock("= Not a heading =", Syntax.PLAIN_1_0)), xdom.getChildren());
     }
+
+    @Test
+    void breadcrumbIsTheTitle() throws Exception
+    {
+        this.document.setTitle("Release notes");
+
+        assertEquals(List.of("Release notes"), this.document.getBreadcrumb());
+    }
+
+    @Test
+    void breadcrumbOfADocumentWithoutTitleIsEmpty()
+    {
+        assertEquals(List.of(), this.document.getBreadcrumb());
+    }
 }

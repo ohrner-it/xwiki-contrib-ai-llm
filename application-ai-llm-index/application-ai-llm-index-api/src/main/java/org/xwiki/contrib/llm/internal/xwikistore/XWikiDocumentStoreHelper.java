@@ -32,6 +32,7 @@ import javax.inject.Named;
 import javax.inject.Provider;
 import javax.inject.Singleton;
 
+import org.apache.commons.lang3.StringUtils;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.IndexException;
@@ -41,6 +42,7 @@ import org.xwiki.model.EntityType;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.DocumentReferenceResolver;
 import org.xwiki.model.reference.EntityReference;
+import org.xwiki.model.reference.EntityReferenceProvider;
 import org.xwiki.model.reference.EntityReferenceResolver;
 import org.xwiki.model.reference.EntityReferenceSerializer;
 import org.xwiki.model.reference.SpaceReference;
@@ -113,6 +115,37 @@ public class XWikiDocumentStoreHelper
 
     @Inject
     private Provider<XWikiContext> contextProvider;
+
+    @Inject
+    private EntityReferenceProvider defaultEntityReferenceProvider;
+
+    /**
+     * The breadcrumb of a page: its wiki when it is not the context wiki, the names of its parent pages, outermost
+     * first, and its title, or its name when the title is empty. Parent pages are given by their names, which are
+     * part of the reference of the page, rather than by their titles, which a reader of the page may not be allowed
+     * to see.
+     *
+     * @param documentReference the reference of the page
+     * @param title the plain text title of the page
+     * @return the breadcrumb of the page
+     * @since 1.0.2
+     */
+    public List<String> getBreadcrumb(DocumentReference documentReference, String title)
+    {
+        List<String> result = new ArrayList<>();
+        String wiki = documentReference.getWikiReference().getName();
+        if (!wiki.equals(this.contextProvider.get().getWikiId())) {
+            result.add(wiki);
+        }
+        List<SpaceReference> spaces = documentReference.getSpaceReferences();
+        boolean isSpaceHomePage = this.defaultEntityReferenceProvider.getDefaultReference(EntityType.DOCUMENT)
+            .getName().equals(documentReference.getName());
+        List<SpaceReference> parents = isSpaceHomePage ? spaces.subList(0, spaces.size() - 1) : spaces;
+        parents.forEach(space -> result.add(space.getName()));
+        String name = isSpaceHomePage ? spaces.get(spaces.size() - 1).getName() : documentReference.getName();
+        result.add(StringUtils.isBlank(title) ? name : title);
+        return result;
+    }
 
     /**
      * Resolve the given list of space references as strings taking the given collection reference as base. Filter
