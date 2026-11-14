@@ -19,9 +19,14 @@
  */
 package org.xwiki.contrib.llm.internal;
 
+import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.xwiki.model.reference.DocumentReference;
+import org.xwiki.rendering.block.RawBlock;
+import org.xwiki.rendering.block.XDOM;
+import org.xwiki.rendering.syntax.Syntax;
 import org.xwiki.security.authorization.Right;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 
@@ -90,5 +95,15 @@ class DefaultDocumentTest
         assertNotSame(this.xWikiDocument, clone);
         assertEquals(DOCUMENT_REFERENCE, clone.getDocumentReference());
         assertSame(clone, this.document.getClonedXWikiDocument());
+    }
+
+    @Test
+    void getIndexableXDOMIsTheContentAsPlainText() throws Exception
+    {
+        this.document.setContent("= Not a heading =");
+
+        XDOM xdom = this.document.getIndexableXDOM();
+
+        assertEquals(List.of(new RawBlock("= Not a heading =", Syntax.PLAIN_1_0)), xdom.getChildren());
     }
 }

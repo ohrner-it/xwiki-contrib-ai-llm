@@ -23,7 +23,9 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -43,13 +45,17 @@ import org.xwiki.component.descriptor.ComponentInstantiationStrategy;
 import org.xwiki.contrib.llm.Chunk;
 import org.xwiki.contrib.llm.Document;
 import org.xwiki.contrib.llm.IndexException;
+import org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentIndexableXDOMBuilder.ObjectSection;
+import org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentIndexableXDOMBuilder.PropertyValue;
 import org.xwiki.localization.ContextualLocalizationManager;
 import org.xwiki.mail.GeneralMailConfiguration;
 import org.xwiki.model.reference.EntityReferenceSerializer;
+import org.xwiki.rendering.block.XDOM;
 import org.xwiki.rendering.syntax.Syntax;
 import org.xwiki.rendering.syntax.SyntaxType;
 
 import com.xpn.xwiki.XWikiContext;
+import com.xpn.xwiki.doc.XWikiAttachment;
 import com.xpn.xwiki.doc.XWikiDocument;
 import com.xpn.xwiki.objects.BaseObject;
 import com.xpn.xwiki.objects.classes.BaseClass;
@@ -129,6 +135,9 @@ public class XWikiDocumentDocument implements Document
     @Inject
     private ContextualLocalizationManager localizationManager;
 
+    @Inject
+    private XWikiDocumentIndexableXDOMBuilder xdomBuilder;
+
     private final Tika tika = new Tika();
 
     /**
@@ -169,12 +178,7 @@ public class XWikiDocumentDocument implements Document
     @Override
     public String getLanguage()
     {
-        Locale locale = this.xWikiDocument.getLocale();
-        if (locale != null && !locale.equals(Locale.ROOT)) {
-            return this.xWikiDocument.getLocale().toString();
-        } else {
-            return this.xWikiDocument.getDefaultLocale().toString();
-        }
+        return getRealLocale().toString();
     }
 
     /**
@@ -219,38 +223,120 @@ public class XWikiDocumentDocument implements Document
         return Stream.of(
             formatHeading(1, this.xWikiDocument.getRenderedTitle(this.xWikiDocument.getSyntax(), context))
                 + this.xWikiDocument.getContent(),
-                getFormattedXObjects(),
+                getFormattedXObjects(context),
                 getFormattedAttachments()
             )
             .filter(StringUtils::isNotBlank)
             .collect(Collectors.joining(DELIMITER));
     }
 
-    private String getFormattedAttachments()
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The indexed body of a page is built by {@link XWikiDocumentIndexableXDOMBuilder} from its content, the objects
+     * and properties selected as for {@link #getContent()}, and its attachments. It is computed in the language of the
+     * page, and with the wiki of the page and the page as context, so that the macros of the wiki of the page are
+     * found and links get their labels from the page.</p>
+     */
+    @Override
+    public XDOM getIndexableXDOM()
     {
         XWikiContext context = this.xWikiContextProvider.get();
-        return this.xWikiDocument.getAttachmentList().stream().flatMap(attachment -> {
+        String previousWiki = context.getWikiId();
+        XWikiDocument previousDocument = context.getDoc();
+        Locale previousLocale = context.getLocale();
+        try {
+            context.setLocale(getRealLocale());
+            // The headings of objects are translations of this application, which may be installed only on the wiki
+            // of the collection, the context wiki: the objects are selected before switching to the wiki of the page.
+            List<IndexableObject> objects = getIndexableObjects(context);
+
+            context.setWikiId(this.xWikiDocument.getDocumentReference().getWikiReference().getName());
+            context.setDoc(this.xWikiDocument);
+            List<ObjectSection> objectSections =
+                objects.stream().map(object -> getObjectSection(object, context)).toList();
+            return this.xdomBuilder.build(this.xWikiDocument, objectSections, getAttachmentTexts());
+        } finally {
+            context.setWikiId(previousWiki);
+            context.setDoc(previousDocument);
+            context.setLocale(previousLocale);
+        }
+    }
+
+    private Locale getRealLocale()
+    {
+        Locale locale = this.xWikiDocument.getLocale();
+        return locale != null && !Locale.ROOT.equals(locale) ? locale : this.xWikiDocument.getDefaultLocale();
+    }
+
+    private static ObjectSection getObjectSection(IndexableObject indexableObject, XWikiContext context)
+    {
+        BaseObject xObject = indexableObject.object();
+        List<PropertyValue> properties = indexableObject.properties().stream()
+            .map(xProperty -> new PropertyValue(xProperty.getTranslatedPrettyName(context),
+                xObject.getStringValue(xProperty.getName()), xProperty))
+            .toList();
+        return new ObjectSection(indexableObject.heading(), properties);
+    }
+
+    /**
+     * @return the text of the attachments of the page that have text, by file name, in the order of the page
+     */
+    private Map<String, String> getAttachmentTexts()
+    {
+        XWikiContext context = this.xWikiContextProvider.get();
+        Map<String, String> result = new LinkedHashMap<>();
+        for (XWikiAttachment attachment : this.xWikiDocument.getAttachmentList()) {
             try {
                 String content = this.tika.parseToString(attachment.getContentInputStream(context));
                 if (StringUtils.isNotBlank(content)) {
-                    return Stream.of(formatHeading(2, attachment.getFilename()) + content);
+                    result.put(attachment.getFilename(), content);
                 }
             } catch (Exception e) {
                 this.logger.warn("Failed to parse attachment content: {}", ExceptionUtils.getRootCauseMessage(e));
             }
-            return Stream.empty();
-        }).collect(Collectors.joining(DELIMITER));
+        }
+        return result;
     }
 
-    private String getFormattedXObjects()
+    private String getFormattedAttachments()
     {
-        XWikiContext context = this.xWikiContextProvider.get();
+        return getAttachmentTexts().entrySet().stream()
+            .map(attachment -> formatHeading(2, attachment.getKey()) + attachment.getValue())
+            .collect(Collectors.joining(DELIMITER));
+    }
+
+    /**
+     * An object of the page and its properties whose values are indexed.
+     *
+     * @param object the object
+     * @param heading the heading of the object
+     * @param properties the properties of the class of the object that may be indexed and whose value is not blank;
+     *     never empty
+     */
+    private record IndexableObject(BaseObject object, String heading, List<PropertyClass> properties)
+    {
+    }
+
+    /**
+     * @return the objects of the page whose properties may be indexed, see the class description, in the order of
+     *     the page; objects without any such property are left out
+     */
+    private List<IndexableObject> getIndexableObjects(XWikiContext context)
+    {
         // The platform's mail obfuscation setting is read once per document, not once per property.
         boolean obfuscateEmails = this.generalMailConfiguration.shouldObfuscate();
         return this.xWikiDocument.getXObjects().values().stream().flatMap(List::stream)
             .filter(Objects::nonNull)
             .filter(xObject -> !isExcludedClass(xObject))
-            .flatMap(xObject -> formatXObject(xObject, context, obfuscateEmails))
+            .flatMap(xObject -> getIndexableObject(xObject, context, obfuscateEmails))
+            .toList();
+    }
+
+    private String getFormattedXObjects(XWikiContext context)
+    {
+        return getIndexableObjects(context).stream()
+            .map(indexableObject -> formatXObject(indexableObject, context))
             .collect(Collectors.joining(DELIMITER));
     }
 
@@ -266,13 +352,14 @@ public class XWikiDocumentDocument implements Document
     }
 
     /**
-     * Format a single object. Only properties defined by the object's class are considered, and only those whose
-     * type may be indexed.
+     * Select the properties of a single object that are indexed: only properties defined by the object's class are
+     * considered, and only those whose type may be indexed and whose value is not blank.
      *
-     * @return the formatted object as a single-element stream, or an empty stream when nothing of the object is
-     *     indexed
+     * @return the object with its indexed properties as a single-element stream, or an empty stream when nothing of
+     *     the object is indexed
      */
-    private Stream<String> formatXObject(BaseObject xObject, XWikiContext context, boolean obfuscateEmails)
+    private Stream<IndexableObject> getIndexableObject(BaseObject xObject, XWikiContext context,
+        boolean obfuscateEmails)
     {
         BaseClass xClass = xObject.getXClass(context);
         if (xClass == null) {
@@ -282,22 +369,33 @@ public class XWikiDocumentDocument implements Document
         }
 
         Collection<?> fieldList = xClass.getFieldList();
-        String objectProperties = fieldList.stream()
+        List<PropertyClass> properties = fieldList.stream()
             .filter(PropertyClass.class::isInstance)
             .map(PropertyClass.class::cast)
             .filter(xProperty -> isIndexableProperty(xProperty, obfuscateEmails))
             .filter(xProperty -> xObject.safeget(xProperty.getName()) != null)
-            .flatMap(xProperty -> formatProperty(xObject, xProperty, context))
-            .collect(Collectors.joining(DELIMITER));
+            .filter(xProperty -> StringUtils.isNotBlank(xObject.getStringValue(xProperty.getName())))
+            .toList();
 
-        if (StringUtils.isBlank(objectProperties)) {
-            return Stream.empty();
-        }
+        return properties.isEmpty() ? Stream.empty()
+            : Stream.of(new IndexableObject(xObject, getObjectHeading(xObject), properties));
+    }
 
-        String heading = this.localizationManager.getTranslationPlain("aiLLM.index.objectHeading",
+    private String getObjectHeading(BaseObject xObject)
+    {
+        return this.localizationManager.getTranslationPlain("aiLLM.index.objectHeading",
             this.compactEntityReferenceSerializer.serialize(xObject.getXClassReference(),
                 xObject.getDocumentReference()));
-        return Stream.of(formatHeading(1, heading) + objectProperties);
+    }
+
+    private String formatXObject(IndexableObject indexableObject, XWikiContext context)
+    {
+        BaseObject xObject = indexableObject.object();
+        String objectProperties = indexableObject.properties().stream()
+            .map(xProperty -> formatHeading(2, xProperty.getTranslatedPrettyName(context))
+                + xObject.getStringValue(xProperty.getName()))
+            .collect(Collectors.joining(DELIMITER));
+        return formatHeading(1, indexableObject.heading()) + objectProperties;
     }
 
     /**
@@ -312,15 +410,6 @@ public class XWikiDocumentDocument implements Document
         boolean isPassword = propertyClass instanceof PasswordClass || PASSWORD_CLASS_TYPE.equals(classType);
         boolean isEmail = propertyClass instanceof EmailClass || EMAIL_CLASS_TYPE.equals(classType);
         return !isPassword && !(isEmail && obfuscateEmails);
-    }
-
-    private Stream<String> formatProperty(BaseObject xObject, PropertyClass xProperty, XWikiContext context)
-    {
-        String value = xObject.getStringValue(xProperty.getName());
-        if (StringUtils.isNotBlank(value)) {
-            return Stream.of(formatHeading(2, xProperty.getTranslatedPrettyName(context)) + value);
-        }
-        return Stream.empty();
     }
 
     private String formatHeading(int level, String content)
