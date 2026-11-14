@@ -81,29 +81,22 @@
         <classType>com.xpn.xwiki.objects.classes.NumberClass</classType>
       </chunkingMaxSize>
       <chunkingMethod>
-        <cache>0</cache>
-        <customDisplay/>
-        <defaultValue>maxChars</defaultValue>
+        <customDisplay>{{include reference="AI.Collections.Code.ComponentHintDisplayer"/}}
+
+{{velocity}}
+#_aiLLMComponentHintDisplayer('aiLLM.index.chunkingMethod' $services.collectionManager.chunkingMethodValues 'maxChars')
+{{/velocity}}</customDisplay>
         <disabled>0</disabled>
-        <displayType>select</displayType>
-        <freeText/>
         <hint/>
-        <largeStorage>0</largeStorage>
-        <multiSelect>0</multiSelect>
         <name>chunkingMethod</name>
         <number>4</number>
         <picker>0</picker>
         <prettyName>Chunking method</prettyName>
-        <relationalStorage>1</relationalStorage>
-        <separator> </separator>
-        <separators> ,|</separators>
-        <size>1</size>
-        <sort>value</sort>
+        <size>30</size>
         <unmodifiable>0</unmodifiable>
         <validationMessage/>
         <validationRegExp/>
-        <values>maxChars=Max characters chunking</values>
-        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
       </chunkingMethod>
       <chunkingOverlapOffset>
         <customDisplay/>
@@ -148,41 +141,10 @@
         <classType>com.xpn.xwiki.objects.classes.DBListClass</classType>
       </documentSpaces>
       <documentStore>
-        <customDisplay>{{velocity}}
-#if ($type == 'view' || $type == 'search' || $type == 'rendered')
-  #if ("$!value" == '')
-    #set ($value = 'internal')
-  #end
-  #set ($localizationKey = "aiLLM.index.documentStore.${value}.name")
-  #if ($services.localization.get($localizationKey))
-    #set ($entryDisplayName = $services.localization.render($localizationKey))
-  #else
-    #set ($entryDisplayName = $value)
-  #end
-  $services.rendering.escape($entryDisplayName, 'xwiki/2.1')
-#elseif ($type == 'edit')
-{{html clean="false"}}
-&lt;select name="$escapetool.xml("${object.getxWikiClass().name}_${object.number}_${name}")"
- id="$escapetool.xml("${object.getxWikiClass().name}_${object.number}_${name}")"&gt;
-#foreach($possibleValue in $services.collectionManager.getDocumentStoreValues())
-  #set ($localizationKey = "aiLLM.index.documentStore.${possibleValue}.name")
-  #if ($services.localization.get($localizationKey))
-    #set ($entryDisplayName = $services.localization.render($localizationKey))
-  #else
-    #set ($entryDisplayName = $possibleValue)
-  #end
-  &lt;option value="$escapetool.xml($possibleValue)"#if($possibleValue.equalsIgnoreCase($value)) selected="selected"#end 
-  &gt;$escapetool.xml($entryDisplayName)&lt;/option&gt;
-#end
-&lt;/select&gt;
-{{/html}}
-#elseif ($type == 'hidden')
-  {{html clean="false"}}
-    $doc.displayHidden($field, $prefix, $object)
-  {{/html}}
-#else
-  Unknown display mode.
-#end
+        <customDisplay>{{include reference="AI.Collections.Code.ComponentHintDisplayer"/}}
+
+{{velocity}}
+#_aiLLMComponentHintDisplayer('aiLLM.index.documentStore' $services.collectionManager.documentStoreValues 'internal')
 {{/velocity}}</customDisplay>
         <disabled>0</disabled>
         <hint/>

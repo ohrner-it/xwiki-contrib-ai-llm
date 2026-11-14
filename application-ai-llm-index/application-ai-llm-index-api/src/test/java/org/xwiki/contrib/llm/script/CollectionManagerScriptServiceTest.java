@@ -22,9 +22,13 @@ package org.xwiki.contrib.llm.script;
 import java.util.List;
 
 import javax.inject.Named;
+import javax.inject.Provider;
 
 import org.junit.jupiter.api.Test;
+import org.xwiki.component.manager.ComponentManager;
+import org.xwiki.contrib.llm.ChunkingMethod;
 import org.xwiki.contrib.llm.CollectionManager;
+import org.xwiki.contrib.llm.DocumentStore;
 import org.xwiki.contrib.llm.IndexTaskConsumer;
 import org.xwiki.contrib.llm.internal.CollectionIndexingTaskConsumer;
 import org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentCollectionIndexingTaskConsumer;
@@ -35,8 +39,10 @@ import org.xwiki.security.authorization.AccessDeniedException;
 import org.xwiki.security.authorization.ContextualAuthorizationManager;
 import org.xwiki.security.authorization.Right;
 import org.xwiki.test.junit5.mockito.ComponentTest;
+import org.xwiki.test.junit5.mockito.InjectComponentManager;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 import org.xwiki.test.junit5.mockito.MockComponent;
+import org.xwiki.test.mockito.MockitoComponentManager;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -72,6 +78,33 @@ class CollectionManagerScriptServiceTest
 
     @MockComponent
     private TaskManager taskManager;
+
+    @MockComponent
+    @Named("context")
+    private Provider<ComponentManager> contextComponentManagerProvider;
+
+    @InjectComponentManager
+    private MockitoComponentManager componentManager;
+
+    @Test
+    void chunkingMethodValuesAreTheHintsOfTheInstalledChunkingMethodsInOrder() throws Exception
+    {
+        this.componentManager.registerMockComponent(ChunkingMethod.class, "sections");
+        this.componentManager.registerMockComponent(ChunkingMethod.class, "maxChars");
+        when(this.contextComponentManagerProvider.get()).thenReturn(this.componentManager);
+
+        assertEquals(List.of("maxChars", "sections"), this.scriptService.getChunkingMethodValues());
+    }
+
+    @Test
+    void documentStoreValuesAreTheHintsOfTheInstalledDocumentStoresInOrder() throws Exception
+    {
+        this.componentManager.registerMockComponent(DocumentStore.class, "xwiki");
+        this.componentManager.registerMockComponent(DocumentStore.class, "internal");
+        when(this.contextComponentManagerProvider.get()).thenReturn(this.componentManager);
+
+        assertEquals(List.of("internal", "xwiki"), this.scriptService.getDocumentStoreValues());
+    }
 
     @Test
     void documentIndexingQueueSizeSumsDocumentAndCollectionTasks()

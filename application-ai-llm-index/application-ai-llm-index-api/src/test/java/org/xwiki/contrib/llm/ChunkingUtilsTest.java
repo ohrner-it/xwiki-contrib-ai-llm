@@ -22,18 +22,32 @@ package org.xwiki.contrib.llm;
 import java.util.List;
 import java.util.Map;
 
+import javax.inject.Named;
 import javax.inject.Provider;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.Mock;
+import org.xwiki.component.manager.ComponentLookupException;
+import org.xwiki.component.manager.ComponentManager;
+import org.xwiki.test.LogLevel;
+import org.xwiki.test.junit5.LogCaptureExtension;
 import org.xwiki.test.junit5.mockito.ComponentTest;
+import org.xwiki.test.junit5.mockito.InjectComponentManager;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 import org.xwiki.test.junit5.mockito.MockComponent;
+import org.xwiki.test.mockito.MockitoComponentManager;
 
 import com.xpn.xwiki.XWikiContext;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -46,153 +60,188 @@ class ChunkingUtilsTest
 {
     private static final String WIKI = "mywiki";
 
-    private static final String DOCUMENT_ID = "My Document";
+    private static final String COLLECTION_ID = "collection_1";
 
-    private static final String TEST_CONTENT = """
-        = Heading 1 =
-        
-        This is a paragraph.
-        
-        == Heading 2 ==
-        
-        Another paragraph.
-        
-        ## Markdown heading
-        
-        Markdown paragraph.
-        Second line of the paragraph.
-        Third line of the paragraph.
-        
-        Heading
-        =======
-        
-        A sentence in this paragraph. And a very very very long sentence that just doesn't end and needs to be split.
-        """;
+    private static final String DOCUMENT_ID = "Space.Page";
+
+    private static final String DOCUMENT_URL = "https://wiki.example/xwiki/bin/view/Space/Page";
+
+    private static final String LANGUAGE = "de";
+
+    private static final String STORE_HINT = "xwiki";
+
+    private static final String METHOD_HINT = "test";
+
+    @RegisterExtension
+    private LogCaptureExtension logCapture = new LogCaptureExtension(LogLevel.ERROR);
 
     @InjectMockComponents
     private ChunkingUtils chunkingUtils;
 
+    @InjectComponentManager
+    private MockitoComponentManager componentManager;
+
+    @MockComponent
+    @Named("context")
+    private Provider<ComponentManager> contextComponentManagerProvider;
+
     @MockComponent
     private CollectionManager collectionManager;
-
-    @Mock
-    private Collection mockCollection;
-
-    @Mock
-    private Document mockDocument;
 
     @MockComponent
     private Provider<Chunk> chunkProvider;
 
+    @MockComponent
+    private Provider<XWikiContext> contextProvider;
+
     @Mock
     private XWikiContext xWikiContext;
 
-    @MockComponent
-    private Provider<XWikiContext> contextProvider;
+    @Mock
+    private Collection collection;
+
+    @Mock(name = "Space.Page")
+    private Document document;
+
+    private ChunkingMethod chunkingMethod;
 
     @BeforeEach
     void setUp() throws Exception
     {
-        String collectionName = "collectionName";
-        // Setup the mock objects
-        when(this.mockDocument.getCollection()).thenReturn(collectionName);
-        when(this.mockDocument.getContent()).thenReturn(TEST_CONTENT);
-        when(this.mockDocument.getID()).thenReturn(DOCUMENT_ID);
-        when(this.collectionManager.getCollection(collectionName)).thenReturn(this.mockCollection);
+        this.chunkingMethod = this.componentManager.registerMockComponent(ChunkingMethod.class, METHOD_HINT);
+        when(this.contextComponentManagerProvider.get()).thenReturn(this.componentManager);
         when(this.chunkProvider.get()).thenAnswer(invocation -> new Chunk());
-
         when(this.contextProvider.get()).thenReturn(this.xWikiContext);
         when(this.xWikiContext.getWikiId()).thenReturn(WIKI);
+
+        when(this.collection.getID()).thenReturn(COLLECTION_ID);
+        when(this.collection.getChunkingMethod()).thenReturn(METHOD_HINT);
+        when(this.collection.getChunkingMaxSize()).thenReturn(100);
+        when(this.collection.getChunkingOverlapOffset()).thenReturn(10);
+        when(this.collection.getDocumentStoreHint()).thenReturn(STORE_HINT);
+        when(this.collectionManager.getCollection(COLLECTION_ID)).thenReturn(this.collection);
+
+        when(this.document.getID()).thenReturn(DOCUMENT_ID);
+        when(this.document.getCollection()).thenReturn(COLLECTION_ID);
+        when(this.document.getURL()).thenReturn(DOCUMENT_URL);
+        when(this.document.getLanguage()).thenReturn(LANGUAGE);
     }
 
     @Test
-    void testChunkingNoOverlap()
+    void chunkDocumentTurnsTheTextsOfTheCollectionsChunkingMethodIntoChunks() throws Exception
     {
-        // Test the chunking of the document
-        when(this.mockCollection.getChunkingMaxSize()).thenReturn(60);
-        when(this.mockCollection.getChunkingOverlapOffset()).thenReturn(0);
-        Map<Integer, Chunk> actualChunks = this.chunkingUtils.chunkDocument(this.mockDocument);
+        when(this.chunkingMethod.chunk(this.collection, this.document))
+            .thenReturn(List.of(new ChunkText("First text", 0, 10), new ChunkText("Second text", 8, 19)));
 
-        List<String> expectedChunks = List.of("""
-            = Heading 1 =
-            
-            This is a paragraph.
-            
-            """, """
-            == Heading 2 ==
-            
-            Another paragraph.
-            
-            """, """
-            ## Markdown heading
-            
-            Markdown paragraph.
-            """, """
-            Second line of the paragraph.
-            Third line of the paragraph.
-            
-            """, """
-            Heading
-            =======
-           
-            A sentence in this paragraph.\s""",
-            "And a very very very long sentence that just doesn't end ", "and needs to be split.\n");
+        List<Chunk> chunks = this.chunkingUtils.chunkDocument(this.collection, this.document);
 
-        assertEquals(expectedChunks.size(), actualChunks.size());
-        for (Map.Entry<Integer, Chunk> entry : actualChunks.entrySet()) {
-            assertEquals(expectedChunks.get(entry.getKey()), entry.getValue().getContent());
-        }
+        assertEquals(2, chunks.size());
+        assertChunk(chunks.get(0), 0, "First text", 0, 10);
+        assertChunk(chunks.get(1), 1, "Second text", 8, 19);
     }
 
     @Test
-    void testChunkingOverlap()
+    void chunkDocumentWithoutCollectionReturnsTheChunksByIndex() throws Exception
     {
-        // Test the chunking of the document
-        when(this.mockCollection.getChunkingMaxSize()).thenReturn(80);
-        when(this.mockCollection.getChunkingOverlapOffset()).thenReturn(30);
-        Map<Integer, Chunk> actualChunks = this.chunkingUtils.chunkDocument(this.mockDocument);
+        when(this.chunkingMethod.chunk(this.collection, this.document))
+            .thenReturn(List.of(new ChunkText("First text", 0, 10), new ChunkText("Second text", 8, 19)));
 
-        List<String> expectedChunks = List.of("""
-            = Heading 1 =
-            
-            This is a paragraph.
-            
-            == Heading 2 ==
-            
-            Another paragraph.
-            
-            """, """
-            Another paragraph.
-            
-            ## Markdown heading
-            
-            """, """
-            ## Markdown heading
-            
-            Markdown paragraph.
-            Second line of the paragraph.
-            """, """
-            line of the paragraph.
-            Third line of the paragraph.
-            
-            """, """
-            line of the paragraph.
-            
-            Heading
-            =======
-            
-            """,
-            """
-            Heading
-            =======
-            
-            A sentence in this paragraph.\s""",
-            "sentence in this paragraph. And a very very very long sentence that just ",
-            "very long sentence that just doesn't end and needs to be split.\n");
+        Map<Integer, Chunk> chunks = this.chunkingUtils.chunkDocument(this.document);
 
-        assertEquals(expectedChunks.size(), actualChunks.size());
-        for (Map.Entry<Integer, Chunk> entry : actualChunks.entrySet()) {
-            assertEquals(expectedChunks.get(entry.getKey()), entry.getValue().getContent());
-        }
+        assertEquals(List.of(0, 1), chunks.keySet().stream().sorted().toList());
+        assertChunk(chunks.get(0), 0, "First text", 0, 10);
+        assertChunk(chunks.get(1), 1, "Second text", 8, 19);
+    }
+
+    @Test
+    void chunkDocumentWithAChunkingMethodThatIsNotInstalledFails() throws Exception
+    {
+        when(this.collection.getChunkingMethod()).thenReturn("missing");
+
+        IndexException exception = assertThrows(IndexException.class,
+            () -> this.chunkingUtils.chunkDocument(this.collection, this.document));
+
+        assertEquals("The chunking method [missing] of the collection [collection_1] is not installed",
+            exception.getMessage());
+    }
+
+    @Test
+    void chunkDocumentWithAChunkingMethodThatCannotBeLoadedFails() throws Exception
+    {
+        ComponentManager componentManager = mock();
+        when(this.contextComponentManagerProvider.get()).thenReturn(componentManager);
+        when(componentManager.hasComponent(ChunkingMethod.class, METHOD_HINT)).thenReturn(true);
+        ComponentLookupException cause = new ComponentLookupException("Failed to initialize");
+        when(componentManager.getInstance(ChunkingMethod.class, METHOD_HINT)).thenThrow(cause);
+
+        IndexException exception = assertThrows(IndexException.class,
+            () -> this.chunkingUtils.chunkDocument(this.collection, this.document));
+
+        assertEquals("The chunking method [test] of the collection [collection_1] could not be loaded",
+            exception.getMessage());
+        assertSame(cause, exception.getCause());
+    }
+
+    @Test
+    void chunkDocumentWithoutCollectionReturnsNoChunksWhenChunkingFails()
+    {
+        when(this.collection.getChunkingMethod()).thenReturn("missing");
+
+        assertEquals(Map.of(), this.chunkingUtils.chunkDocument(this.document));
+        assertEquals("Error while chunking the document [Space.Page]: [The chunking method [missing] of the collection "
+            + "[collection_1] is not installed]", this.logCapture.getMessage(0));
+    }
+
+    @Test
+    void chunkDocumentRejectsAMaximumSizeBelowTen() throws Exception
+    {
+        when(this.collection.getChunkingMaxSize()).thenReturn(9);
+        when(this.collection.getChunkingOverlapOffset()).thenReturn(0);
+
+        IndexException exception = assertThrows(IndexException.class,
+            () -> this.chunkingUtils.chunkDocument(this.collection, this.document));
+
+        assertEquals("The maximum chunk size must be at least 10 characters", exception.getMessage());
+        verify(this.chunkingMethod, never()).chunk(any(), any());
+    }
+
+    @Test
+    void chunkDocumentRejectsANegativeOverlap() throws Exception
+    {
+        when(this.collection.getChunkingOverlapOffset()).thenReturn(-1);
+
+        IndexException exception = assertThrows(IndexException.class,
+            () -> this.chunkingUtils.chunkDocument(this.collection, this.document));
+
+        assertEquals("The overlap offset must not be negative", exception.getMessage());
+        verify(this.chunkingMethod, never()).chunk(any(), any());
+    }
+
+    @Test
+    void chunkDocumentRejectsAnOverlapOfHalfTheMaximumSize() throws Exception
+    {
+        when(this.collection.getChunkingOverlapOffset()).thenReturn(50);
+
+        IndexException exception = assertThrows(IndexException.class,
+            () -> this.chunkingUtils.chunkDocument(this.collection, this.document));
+
+        assertEquals("The overlap offset must be smaller than half of the maximum chunk size",
+            exception.getMessage());
+        verify(this.chunkingMethod, never()).chunk(any(), any());
+    }
+
+    private static void assertChunk(Chunk chunk, int index, String content, int posFirstChar, int posLastChar)
+    {
+        assertEquals(index, chunk.getChunkIndex());
+        assertEquals(content, chunk.getContent());
+        assertEquals(posFirstChar, chunk.getPosFirstChar());
+        assertEquals(posLastChar, chunk.getPosLastChar());
+        assertEquals(DOCUMENT_ID, chunk.getDocumentID());
+        assertEquals(COLLECTION_ID, chunk.getCollection());
+        assertEquals(DOCUMENT_URL, chunk.getDocumentURL());
+        assertEquals(LANGUAGE, chunk.getLanguage());
+        assertEquals(WIKI, chunk.getWiki());
+        assertEquals(STORE_HINT, chunk.getStoreHint());
+        assertEquals("mywiki_collection%5F1_Space.Page_" + index, chunk.getId());
     }
 }

@@ -36,6 +36,7 @@ import org.xwiki.component.annotation.InstantiationStrategy;
 import org.xwiki.component.descriptor.ComponentInstantiationStrategy;
 import org.xwiki.component.manager.ComponentLookupException;
 import org.xwiki.component.manager.ComponentManager;
+import org.xwiki.contrib.llm.ChunkingMethod;
 import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.DocumentStore;
 import org.xwiki.contrib.llm.IndexException;
@@ -151,7 +152,12 @@ public class DefaultCollection implements Collection
     @Override
     public String getChunkingMethod()
     {
-        return this.xWikiDocumentWrapper.getStringValue(CHUNKING_METHOD_FIELDNAME);
+        String result = this.xWikiDocumentWrapper.getStringValue(CHUNKING_METHOD_FIELDNAME);
+        if (StringUtils.isBlank(result)) {
+            result = MaxCharsChunkingMethod.NAME;
+        }
+
+        return result;
     }
 
     @Override
@@ -251,7 +257,15 @@ public class DefaultCollection implements Collection
     public void setChunkingMethod(String chunkingMethod) throws IndexException
     {
         if (chunkingMethod != null) {
-            this.xWikiDocumentWrapper.setStringValue(CHUNKING_METHOD_FIELDNAME, chunkingMethod);
+            String value = chunkingMethod.strip();
+            // A method that was uninstalled after it had been selected is kept when the value is set again
+            // unchanged, e.g., when a REST client sends back the collection it has read.
+            boolean changed = !value.equals(this.xWikiDocumentWrapper.getStringValue(CHUNKING_METHOD_FIELDNAME));
+            if (changed && !value.isEmpty()
+                && !this.componentManagerProvider.get().hasComponent(ChunkingMethod.class, value)) {
+                throw new IndexException("The chunking method [%s] is not installed".formatted(value));
+            }
+            this.xWikiDocumentWrapper.setStringValue(CHUNKING_METHOD_FIELDNAME, value);
         }
     }
 
