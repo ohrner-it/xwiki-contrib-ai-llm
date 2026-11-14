@@ -27,6 +27,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import javax.inject.Provider;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.LocaleUtils;
 import org.apache.commons.lang3.function.FailableConsumer;
@@ -36,16 +38,30 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.xwiki.contrib.llm.IndexException;
+import org.xwiki.contrib.llm.internal.IndexTextRenderer;
+import org.xwiki.contrib.llm.internal.IndexableXDOMNormalizer;
 import org.xwiki.localization.ContextualLocalizationManager;
 import org.xwiki.mail.GeneralMailConfiguration;
 import org.xwiki.model.reference.DocumentReference;
+import org.xwiki.rendering.block.ImageBlock;
+import org.xwiki.rendering.block.ParagraphBlock;
+import org.xwiki.rendering.block.WordBlock;
+import org.xwiki.rendering.block.XDOM;
+import org.xwiki.rendering.listener.reference.ResourceReference;
+import org.xwiki.rendering.listener.reference.ResourceType;
+import org.xwiki.rendering.parser.ContentParser;
 import org.xwiki.rendering.syntax.Syntax;
+import org.xwiki.test.annotation.ComponentList;
 import org.xwiki.test.junit5.mockito.ComponentTest;
+import org.xwiki.test.junit5.mockito.InjectComponentManager;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 import org.xwiki.test.junit5.mockito.MockComponent;
+import org.xwiki.test.mockito.MockitoComponentManager;
 
+import com.xpn.xwiki.XWikiContext;
 import com.xpn.xwiki.XWikiException;
 import com.xpn.xwiki.doc.XWikiAttachment;
 import com.xpn.xwiki.doc.XWikiDocument;
@@ -54,6 +70,7 @@ import com.xpn.xwiki.objects.classes.BaseClass;
 import com.xpn.xwiki.objects.classes.EmailClass;
 import com.xpn.xwiki.objects.classes.PasswordClass;
 import com.xpn.xwiki.objects.classes.PropertyClass;
+import com.xpn.xwiki.objects.classes.TextAreaClass;
 import com.xpn.xwiki.test.reference.ReferenceComponentList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,6 +78,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -73,6 +92,7 @@ import static org.mockito.Mockito.when;
  */
 @ComponentTest
 @ReferenceComponentList
+@ComponentList({ IndexTextRenderer.class, XWikiDocumentIndexableXDOMBuilder.class })
 class XWikiDocumentDocumentTest
 {
     private static final String COLLECTION = "mycollection";
@@ -88,6 +108,21 @@ class XWikiDocumentDocumentTest
 
     @MockComponent
     private GeneralMailConfiguration generalMailConfiguration;
+
+    @MockComponent
+    private IndexableXDOMNormalizer normalizer;
+
+    @MockComponent
+    private ContentParser contentParser;
+
+    @MockComponent
+    private Provider<XWikiContext> contextProvider;
+
+    @InjectComponentManager
+    private MockitoComponentManager componentManager;
+
+    @Mock
+    private XWikiContext context;
 
     @Mock
     private XWikiDocument xWikiDocument;
@@ -531,5 +566,172 @@ class XWikiDocumentDocumentTest
             new MethodParameter(XWikiDocumentDocument::getXWikiDocument, "getXWikiDocument"),
             new MethodParameter(XWikiDocumentDocument::chunkDocument, "chunkDocument")
         );
+    }
+
+    /**
+     * Stub the content of the page for {@link XWikiDocumentDocument#getIndexableXDOM()}: a paragraph with the given
+     * text.
+     *
+     * @return the content
+     */
+    private XDOM setUpIndexableContent(String text)
+    {
+        XDOM content = new XDOM(List.of(new ParagraphBlock(List.of(new WordBlock(text)))));
+        when(this.xWikiDocument.getXDOM()).thenReturn(content);
+        when(this.xWikiDocument.getSyntax()).thenReturn(Syntax.XWIKI_2_1);
+        when(this.xWikiDocument.getLocale()).thenReturn(Locale.FRENCH);
+        when(this.contextProvider.get()).thenReturn(this.context);
+        return content;
+    }
+
+    private String renderIndexableXDOM() throws Exception
+    {
+        IndexTextRenderer renderer = this.componentManager.getInstance(IndexTextRenderer.class);
+        return renderer.render(this.xWikiDocumentDocument.getIndexableXDOM());
+    }
+
+    private static TextAreaClass mockTextArea(String contentType)
+    {
+        TextAreaClass textArea = mock();
+        when(textArea.getContentType()).thenReturn(contentType);
+        return textArea;
+    }
+
+    @Test
+    void getIndexableXDOMContainsTheNormalizedContentTheObjectsAndTheAttachments() throws Exception
+    {
+        XDOM content = setUpIndexableContent("Page text");
+        List<PropertyClass> properties = new ArrayList<>();
+        BaseObject xObject = mockObject(mockClass(properties));
+        properties.add(mockProperty(xObject, "name"));
+        properties.add(mockProperty(xObject, "description", mockTextArea("FullyRenderedText")));
+        properties.add(mockProperty(xObject, "notes", mockTextArea("PureText")));
+        properties.add(mockProperty(xObject, "script", mockTextArea("VelocityCode")));
+        setObjects(xObject);
+        XDOM description = new XDOM(List.of(new ParagraphBlock(List.of(new WordBlock("Parsed description")))));
+        when(this.contentParser.parse("descriptionValue", Syntax.XWIKI_2_1, DOCUMENT_REFERENCE.withoutLocale()))
+            .thenReturn(description);
+        XWikiAttachment attachment = mock();
+        when(attachment.getFilename()).thenReturn("notes.txt");
+        when(attachment.getContentInputStream(any()))
+            .thenReturn(IOUtils.toInputStream("Attachment text", StandardCharsets.UTF_8));
+        when(this.xWikiDocument.getAttachmentList()).thenReturn(List.of(attachment));
+
+        assertEquals("""
+            Page text
+
+            # Metadata of Type AI.XClass
+
+            ## Property name
+
+            nameValue
+
+            ## Property description
+
+            Parsed description
+
+            ## Property notes
+
+            notesValue
+
+            # notes.txt
+
+            Attachment text""", renderIndexableXDOM());
+        verify(this.normalizer).normalize(content, Syntax.XWIKI_2_1);
+        verify(this.normalizer).normalize(description, Syntax.XWIKI_2_1);
+    }
+
+    @Test
+    void getIndexableXDOMLeavesOutAnObjectWithOnlyVelocityProperties() throws Exception
+    {
+        setUpIndexableContent("Page text");
+        List<PropertyClass> properties = new ArrayList<>();
+        BaseObject xObject = mockObject(mockClass(properties));
+        properties.add(mockProperty(xObject, "script", mockTextArea("VelocityWiki")));
+        setObjects(xObject);
+
+        assertEquals("Page text", renderIndexableXDOM());
+    }
+
+    @Test
+    void getIndexableXDOMLeavesOutAPropertyWhoseValueHasNoText() throws Exception
+    {
+        setUpIndexableContent("Page text");
+        List<PropertyClass> properties = new ArrayList<>();
+        BaseObject xObject = mockObject(mockClass(properties));
+        properties.add(mockProperty(xObject, "poster", mockTextArea("FullyRenderedText")));
+        properties.add(mockProperty(xObject, "runtime"));
+        setObjects(xObject);
+        // An image without alternative text, like [[image:poster.png||width="64"]].
+        XDOM poster = new XDOM(List.of(new ParagraphBlock(List.of(
+            new ImageBlock(new ResourceReference("poster.png", ResourceType.ATTACHMENT), false,
+                Map.of("width", "64"))))));
+        when(this.contentParser.parse("posterValue", Syntax.XWIKI_2_1, DOCUMENT_REFERENCE.withoutLocale()))
+            .thenReturn(poster);
+
+        assertEquals("""
+            Page text
+
+            # Metadata of Type AI.XClass
+
+            ## Property runtime
+
+            runtimeValue""", renderIndexableXDOM());
+    }
+
+    @Test
+    void getIndexableXDOMIsComputedInTheContextOfThePage() throws Exception
+    {
+        setUpIndexableContent("Page text");
+        XWikiDocument previousDocument = mock();
+        when(this.context.getWikiId()).thenReturn("otherwiki");
+        when(this.context.getDoc()).thenReturn(previousDocument);
+        when(this.context.getLocale()).thenReturn(Locale.GERMAN);
+
+        this.xWikiDocumentDocument.getIndexableXDOM();
+
+        InOrder inOrder = inOrder(this.context, this.normalizer);
+        inOrder.verify(this.context).setLocale(Locale.FRENCH);
+        inOrder.verify(this.context).setWikiId("mywiki");
+        inOrder.verify(this.context).setDoc(this.xWikiDocument);
+        inOrder.verify(this.normalizer).normalize(any(), eq(Syntax.XWIKI_2_1));
+        inOrder.verify(this.context).setWikiId("otherwiki");
+        inOrder.verify(this.context).setDoc(previousDocument);
+        inOrder.verify(this.context).setLocale(Locale.GERMAN);
+    }
+
+    @Test
+    void getIndexableXDOMResolvesObjectHeadingsBeforeSwitchingToTheWikiOfThePage() throws Exception
+    {
+        setUpIndexableContent("Page text");
+        when(this.context.getWikiId()).thenReturn("otherwiki");
+        List<PropertyClass> properties = new ArrayList<>();
+        BaseObject xObject = mockObject(mockClass(properties));
+        properties.add(mockProperty(xObject, "name"));
+        setObjects(xObject);
+
+        this.xWikiDocumentDocument.getIndexableXDOM();
+
+        InOrder inOrder = inOrder(this.context, this.localizationManager);
+        inOrder.verify(this.context).setLocale(Locale.FRENCH);
+        inOrder.verify(this.localizationManager).getTranslationPlain(eq("aiLLM.index.objectHeading"), any());
+        inOrder.verify(this.context).setWikiId("mywiki");
+    }
+
+    @Test
+    void getIndexableXDOMRestoresTheContextWhenItFails()
+    {
+        setUpIndexableContent("Page text");
+        XWikiDocument previousDocument = mock();
+        when(this.context.getWikiId()).thenReturn("otherwiki");
+        when(this.context.getDoc()).thenReturn(previousDocument);
+        when(this.context.getLocale()).thenReturn(Locale.GERMAN);
+        doThrow(new IllegalStateException("Failure")).when(this.normalizer).normalize(any(), any());
+
+        assertThrows(IllegalStateException.class, () -> this.xWikiDocumentDocument.getIndexableXDOM());
+
+        verify(this.context).setWikiId("otherwiki");
+        verify(this.context).setDoc(previousDocument);
+        verify(this.context).setLocale(Locale.GERMAN);
     }
 }

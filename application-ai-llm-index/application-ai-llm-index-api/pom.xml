@@ -33,8 +33,8 @@
     <properties>
         <xwiki.extension.name>LLM Index API</xwiki.extension.name>
         <xwiki.extension.category>api</xwiki.extension.category>
-        <!-- Measured 0.63 on 2026-11-14 (LLMAI-229 tests added); pinned with a small margin. -->
-        <xwiki.jacoco.instructionRatio>0.62</xwiki.jacoco.instructionRatio>
+        <!-- Measured 0.67 on 2026-11-14 (LLMAI-176 tests added); pinned with a small margin. -->
+        <xwiki.jacoco.instructionRatio>0.66</xwiki.jacoco.instructionRatio>
         <xwiki.extension.features>
           org.xwiki.contrib.llm:application-llm-index-api
         </xwiki.extension.features>
@@ -66,6 +66,11 @@
             <version>${platform.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.xwiki.rendering</groupId>
+            <artifactId>xwiki-rendering-transformation-macro</artifactId>
+            <version>${rendering.version}</version>
+        </dependency>
+        <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
@@ -84,8 +89,49 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.xwiki.rendering</groupId>
+            <artifactId>xwiki-rendering-macro-box</artifactId>
+            <version>${rendering.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.xwiki.rendering</groupId>
+            <artifactId>xwiki-rendering-macro-message</artifactId>
+            <version>${rendering.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.xwiki.rendering</groupId>
+            <artifactId>xwiki-rendering-macro-content</artifactId>
+            <version>${rendering.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.xwiki.rendering</groupId>
+            <artifactId>xwiki-rendering-macro-raw</artifactId>
+            <version>${rendering.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.xwiki.rendering</groupId>
+            <artifactId>xwiki-rendering-macro-comment</artifactId>
+            <version>${rendering.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.xwiki.rendering</groupId>
+            <artifactId>xwiki-rendering-macro-html</artifactId>
+            <version>${rendering.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>javax.servlet</groupId>
             <artifactId>javax.servlet-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

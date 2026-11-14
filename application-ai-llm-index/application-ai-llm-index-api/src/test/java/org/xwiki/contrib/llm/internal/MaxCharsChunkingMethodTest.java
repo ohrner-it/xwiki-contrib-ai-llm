@@ -27,6 +27,13 @@ import org.mockito.Mock;
 import org.xwiki.contrib.llm.ChunkText;
 import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.Document;
+import org.xwiki.rendering.block.ParagraphBlock;
+import org.xwiki.rendering.block.RawBlock;
+import org.xwiki.rendering.block.SpaceBlock;
+import org.xwiki.rendering.block.WordBlock;
+import org.xwiki.rendering.block.XDOM;
+import org.xwiki.rendering.syntax.Syntax;
+import org.xwiki.test.annotation.ComponentList;
 import org.xwiki.test.junit5.mockito.ComponentTest;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 
@@ -39,6 +46,7 @@ import static org.mockito.Mockito.when;
  * @version $Id$
  */
 @ComponentTest
+@ComponentList(IndexTextRenderer.class)
 class MaxCharsChunkingMethodTest
 {
     private static final String TEST_CONTENT = """
@@ -59,7 +67,7 @@ class MaxCharsChunkingMethodTest
         Heading
         =======
 
-        A sentence in this paragraph. And a very very very long sentence that just doesn't end and needs to be split.
+        A sentence in this paragraph. And a very very very long sentence that just doesn't end and needs to be split.\
         """;
 
     @InjectMockComponents
@@ -74,7 +82,8 @@ class MaxCharsChunkingMethodTest
     @BeforeEach
     void setUp()
     {
-        when(this.document.getContent()).thenReturn(TEST_CONTENT);
+        when(this.document.getIndexableXDOM())
+            .thenReturn(new XDOM(List.of(new RawBlock(TEST_CONTENT, Syntax.PLAIN_1_0))));
     }
 
     @Test
@@ -108,7 +117,7 @@ class MaxCharsChunkingMethodTest
             =======
 
             A sentence in this paragraph.\s""",
-            "And a very very very long sentence that just doesn't end ", "and needs to be split.\n");
+            "And a very very very long sentence that just doesn't end ", "and needs to be split.");
         assertEquals(expectedChunks, chunks.stream().map(ChunkText::content).toList());
     }
 
@@ -156,7 +165,7 @@ class MaxCharsChunkingMethodTest
 
             A sentence in this paragraph.\s""",
             "sentence in this paragraph. And a very very very long sentence that just ",
-            "very long sentence that just doesn't end and needs to be split.\n");
+            "very long sentence that just doesn't end and needs to be split.");
         assertEquals(expectedChunks, chunks.stream().map(ChunkText::content).toList());
     }
 
@@ -175,5 +184,31 @@ class MaxCharsChunkingMethodTest
                 "The content of the chunk starting at %d is not the content at its positions"
                     .formatted(chunk.posFirstChar()));
         }
+    }
+
+    @Test
+    void titleIsTheFirstHeadingOfTheText()
+    {
+        when(this.collection.getChunkingMaxSize()).thenReturn(100);
+        when(this.collection.getChunkingOverlapOffset()).thenReturn(0);
+        when(this.document.getTitle()).thenReturn("Employee handbook");
+        when(this.document.getIndexableXDOM()).thenReturn(new XDOM(
+            List.of(new ParagraphBlock(List.of(new WordBlock("Laptops"), new SpaceBlock(), new WordBlock("first."))))));
+
+        List<ChunkText> chunks = this.chunkingMethod.chunk(this.collection, this.document);
+
+        assertEquals(List.of(new ChunkText("# Employee handbook\n\nLaptops first.", 0, 35)), chunks);
+    }
+
+    @Test
+    void documentWithOnlyATitleIsTheTitle()
+    {
+        when(this.collection.getChunkingMaxSize()).thenReturn(100);
+        when(this.collection.getChunkingOverlapOffset()).thenReturn(0);
+        when(this.document.getTitle()).thenReturn("Empty page");
+        when(this.document.getIndexableXDOM()).thenReturn(new XDOM(List.of()));
+
+        assertEquals(List.of(new ChunkText("# Empty page", 0, 12)), this.chunkingMethod.chunk(this.collection,
+            this.document));
     }
 }

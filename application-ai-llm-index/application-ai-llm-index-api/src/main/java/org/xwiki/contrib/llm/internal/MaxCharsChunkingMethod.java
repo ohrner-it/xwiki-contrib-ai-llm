@@ -25,9 +25,11 @@ import java.util.OptionalInt;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import org.apache.commons.lang3.StringUtils;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.llm.ChunkText;
 import org.xwiki.contrib.llm.ChunkingMethod;
@@ -35,8 +37,9 @@ import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.Document;
 
 /**
- * Splits the content of a document into chunks of at most the maximum chunk size of the collection, preferring to
- * end a chunk before a heading, then at a blank line, a line break, the end of a sentence or a space, as long as the
+ * Splits the text of a document (its title as heading, followed by its indexed body rendered by
+ * {@link IndexTextRenderer}) into chunks of at most the maximum chunk size of the collection, preferring to
+ * end a chunk before a heading, then at an empty line, a line break, the end of a sentence or a space, as long as the
  * chunk keeps at least half the maximum size. Consecutive chunks overlap by up to the overlap offset of the
  * collection.
  *
@@ -57,7 +60,12 @@ public class MaxCharsChunkingMethod implements ChunkingMethod
 
     private static final Pattern HEADING_PATTERN = Pattern.compile(HEADING_REGEX, Pattern.MULTILINE);
 
-    private static final List<String> SEPARATORS = List.of("\n\n", "\n", ". ", " ");
+    private static final String EMPTY_LINE = "\n\n";
+
+    private static final List<String> SEPARATORS = List.of(EMPTY_LINE, "\n", ". ", " ");
+
+    @Inject
+    private IndexTextRenderer renderer;
 
     @Override
     public List<ChunkText> chunk(Collection collection, Document document)
@@ -65,7 +73,7 @@ public class MaxCharsChunkingMethod implements ChunkingMethod
         int maxChunkSize = collection.getChunkingMaxSize();
         int offset = collection.getChunkingOverlapOffset();
 
-        String content = document.getContent();
+        String content = getText(document);
 
         List<ChunkText> result = new ArrayList<>();
 
@@ -103,15 +111,24 @@ public class MaxCharsChunkingMethod implements ChunkingMethod
         return result;
     }
 
+    /**
+     * @return the text of the document that is chunked: its title as heading, followed by its indexed body
+     */
+    private String getText(Document document)
+    {
+        String body = this.renderer.render(document.getIndexableXDOM());
+        String title = document.getTitle();
+        if (StringUtils.isBlank(title)) {
+            return body;
+        }
+        String heading = "# " + title;
+        return body.isEmpty() ? heading : heading + EMPTY_LINE + body;
+    }
+
     private OptionalInt findGoodBoundaryAtEnd(String chunk, int minimumIndex)
     {
-        // Try finding a nicer chunk boundary. Try the following options in order:
-        // 1. The start of a section in XWiki syntax or Markdown.
-        // 2. A blank line.
-        // 3. A linebreak.
-        // 4. The end of a sentence (". ").
-        // 5. Any space.
-        // Truncate to the first option that still gives a chunk that has at least half of the maximum size length.
+        // Truncate to the first boundary in the order of the class description that keeps more than half of the
+        // maximum size in the chunk.
 
         Matcher matcher = HEADING_PATTERN.matcher(chunk);
         int headingIndex = -1;

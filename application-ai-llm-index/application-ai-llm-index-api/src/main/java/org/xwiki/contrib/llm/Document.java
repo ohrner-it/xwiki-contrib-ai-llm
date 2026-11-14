@@ -21,8 +21,13 @@ package org.xwiki.contrib.llm;
 
 import java.util.List;
 
+import org.apache.commons.lang3.StringUtils;
 import org.xwiki.component.annotation.Role;
 import org.xwiki.model.reference.LocalDocumentReference;
+import org.xwiki.rendering.block.RawBlock;
+import org.xwiki.rendering.block.XDOM;
+import org.xwiki.rendering.syntax.Syntax;
+import org.xwiki.stability.Unstable;
 
 import com.xpn.xwiki.doc.XWikiDocument;
 
@@ -107,6 +112,20 @@ public interface Document
      * @return the document's content
      */
     String getContent();
+
+    /**
+     * Retrieves the body of the document that is indexed, without its title, as a syntax-neutral block tree in which
+     * macros are already replaced by their content or removed. The default is the content of the document as plain
+     * text.
+     *
+     * @return the indexed body of the document
+     * @since 1.0.1
+     */
+    @Unstable
+    default XDOM getIndexableXDOM()
+    {
+        return new XDOM(List.of(new RawBlock(StringUtils.defaultString(getContent()), Syntax.PLAIN_1_0)));
+    }
 
     /**
      * Sets the id of the document.
