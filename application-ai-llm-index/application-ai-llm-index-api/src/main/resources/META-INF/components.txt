@@ -10,6 +10,7 @@ org.xwiki.contrib.llm.internal.DefaultCollection
 org.xwiki.contrib.llm.internal.DefaultDocument
 org.xwiki.contrib.llm.internal.InternalDocumentStore
 org.xwiki.contrib.llm.internal.MaxCharsChunkingMethod
+org.xwiki.contrib.llm.internal.SectionsChunkingMethod
 org.xwiki.contrib.llm.internal.IndexTextRenderer
 org.xwiki.contrib.llm.internal.IndexableXDOMNormalizer
 org.xwiki.contrib.llm.internal.WriteAttribution
@@ -21,6 +22,7 @@ org.xwiki.contrib.llm.internal.CollectionIndexingTaskConsumer
 org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentCollectionIndexingTaskConsumer
 org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentDocument
 org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentIndexableXDOMBuilder
+org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentAttachmentTexts
 org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentDocumentIndexingTaskConsumer
 org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentStore
 org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentStoreHelper

@@ -92,7 +92,7 @@ import static org.mockito.Mockito.when;
  */
 @ComponentTest
 @ReferenceComponentList
-@ComponentList({ IndexTextRenderer.class, XWikiDocumentIndexableXDOMBuilder.class })
+@ComponentList({ IndexTextRenderer.class, XWikiDocumentIndexableXDOMBuilder.class, XWikiDocumentAttachmentTexts.class })
 class XWikiDocumentDocumentTest
 {
     private static final String COLLECTION = "mycollection";
@@ -114,6 +114,9 @@ class XWikiDocumentDocumentTest
 
     @MockComponent
     private ContentParser contentParser;
+
+    @MockComponent
+    private XWikiDocumentStoreHelper storeHelper;
 
     @MockComponent
     private Provider<XWikiContext> contextProvider;
@@ -733,5 +736,15 @@ class XWikiDocumentDocumentTest
         verify(this.context).setWikiId("otherwiki");
         verify(this.context).setDoc(previousDocument);
         verify(this.context).setLocale(Locale.GERMAN);
+    }
+
+    @Test
+    void getBreadcrumbEndsWithThePlainTitle()
+    {
+        when(this.xWikiDocument.getRenderedTitle(eq(Syntax.PLAIN_1_0), any())).thenReturn("Plain title");
+        when(this.storeHelper.getBreadcrumb(DOCUMENT_REFERENCE.withoutLocale(), "Plain title"))
+            .thenReturn(List.of("AI", "Documents", "Plain title"));
+
+        assertEquals(List.of("AI", "Documents", "Plain title"), this.xWikiDocumentDocument.getBreadcrumb());
     }
 }

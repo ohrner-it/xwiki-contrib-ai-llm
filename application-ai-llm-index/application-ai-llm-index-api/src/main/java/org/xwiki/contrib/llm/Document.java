@@ -114,6 +114,22 @@ public interface Document
     String getContent();
 
     /**
+     * Retrieves the breadcrumb of the document: where it is, outermost first, ending with its own title. The default
+     * is the title alone, or nothing when the title is blank. The breadcrumb can become part of the indexed text, which
+     * everybody who may see the document gets: it must not reveal anything about other documents that these readers
+     * may not see, e.g. the titles of parent pages. It is called with the wiki of the collection as context wiki.
+     *
+     * @return the breadcrumb of the document
+     * @since 1.0.1
+     */
+    @Unstable
+    default List<String> getBreadcrumb()
+    {
+        String title = getTitle();
+        return StringUtils.isBlank(title) ? List.of() : List.of(title);
+    }
+
+    /**
      * Retrieves the body of the document that is indexed, without its title, as a syntax-neutral block tree in which
      * macros are already replaced by their content or removed. The default is the content of the document as plain
      * text.
