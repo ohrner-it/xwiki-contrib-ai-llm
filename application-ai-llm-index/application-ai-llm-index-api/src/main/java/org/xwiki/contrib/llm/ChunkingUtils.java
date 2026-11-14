@@ -22,23 +22,24 @@ package org.xwiki.contrib.llm;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalInt;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import javax.inject.Inject;
+import javax.inject.Named;
 import javax.inject.Provider;
 import javax.inject.Singleton;
 
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
+import org.xwiki.component.manager.ComponentLookupException;
+import org.xwiki.component.manager.ComponentManager;
 
 import com.xpn.xwiki.XWikiContext;
 
 /**
- * Utility class used in chunking the documents.
+ * Utility class used in chunking the documents: splits a document with the {@link ChunkingMethod} of its
+ * collection.
  * 
  * @version $Id$
  */
@@ -46,17 +47,15 @@ import com.xpn.xwiki.XWikiContext;
 @Singleton
 public class ChunkingUtils
 {
-    private static final String HEADING_REGEX = "^( *=+[^=\n]|#+|(?:[^\n]*\n(?:=+|-+)$))";
-
-    private static final Pattern HEADING_PATTERN = Pattern.compile(HEADING_REGEX, Pattern.MULTILINE);
-
-    private static final List<String> SEPARATORS = List.of("\n\n", "\n", ". ", " ");
-
     @Inject
     private Provider<Chunk> chunkProvider;
 
     @Inject
     private CollectionManager collectionManager;
+
+    @Inject
+    @Named("context")
+    private Provider<ComponentManager> componentManagerProvider;
 
     @Inject
     private Logger logger;
@@ -84,73 +83,54 @@ public class ChunkingUtils
     }
 
     /**
-     * Split the document of the given collection into chunks.
+     * Split the document of the given collection into chunks with the chunking method of the collection.
      *
      * @param collection the collection the document is part of
      * @param document the document whose content shall be chunked
      * @return a list of chunks
-     * @throws IndexException if an error occurs while chunking the document or the chunking configuration is invalid
+     * @throws IndexException if an error occurs while chunking the document, the chunking configuration is invalid
+     *     or the chunking method of the collection is not installed
      */
     public List<Chunk> chunkDocument(Collection collection, Document document)
         throws IndexException
     {
-        int maxChunkSize = collection.getChunkingMaxSize();
-        int offset = collection.getChunkingOverlapOffset();
+        validateChunkSizeAndOffset(collection.getChunkingMaxSize(), collection.getChunkingOverlapOffset());
 
-        validateChunkSizeAndOffset(maxChunkSize, offset);
-
-        // get the document content
-        String content = document.getContent();
-
-        // Initialize the chunks map
-        List<Chunk> result = new ArrayList<>();
-
-        int start = 0;
-        int end;
-        int chunkIndex = 0;
+        List<ChunkText> texts = getChunkingMethod(collection).chunk(collection, document);
 
         XWikiContext context = this.contextProvider.get();
-    
-        while (start < content.length()) {
-            // Find the next index to end the chunk
-            end = Math.min(start + maxChunkSize, content.length());
-    
-            // Extract the chunk content
-            String chunkContent = content.substring(start, end);
-
-            // Truncate the content to a semantic boundary if we're not at the end of the document, yet.
-            if (end < content.length()) {
-                OptionalInt truncateIndex = findGoodBoundaryAtEnd(chunkContent, maxChunkSize / 2);
-                if (truncateIndex.isPresent()) {
-                    end = start + truncateIndex.getAsInt();
-                    chunkContent = content.substring(start, end);
-                }
-            }
-
-            Chunk chunk = chunkProvider.get();
+        List<Chunk> result = new ArrayList<>(texts.size());
+        for (ChunkText text : texts) {
+            Chunk chunk = this.chunkProvider.get();
             chunk.initialize(document.getID(),
                             document.getCollection(),
                             document.getURL(),
                             document.getLanguage(),
-                            start, end, chunkContent);
-            chunk.setChunkIndex(chunkIndex);
+                            text.posFirstChar(), text.posLastChar(), text.content());
+            chunk.setChunkIndex(result.size());
             chunk.setWiki(context.getWikiId());
             chunk.setStoreHint(collection.getDocumentStoreHint());
             chunk.computeId();
             result.add(chunk);
-    
-            // Prepare for the next iteration
-            if (end < content.length() && offset > 0) {
-                OptionalInt goodOverlap =
-                    findGoodBoundaryAtStart(chunkContent.substring(chunkContent.length() - offset), offset / 2);
-                start = end - offset + goodOverlap.orElse(0);
-            } else {
-                start = end;
-            }
-            chunkIndex++;
         }
-    
+
         return result;
+    }
+
+    private ChunkingMethod getChunkingMethod(Collection collection) throws IndexException
+    {
+        String hint = collection.getChunkingMethod();
+        ComponentManager componentManager = this.componentManagerProvider.get();
+        if (!componentManager.hasComponent(ChunkingMethod.class, hint)) {
+            throw new IndexException("The chunking method [%s] of the collection [%s] is not installed"
+                .formatted(hint, collection.getID()));
+        }
+        try {
+            return componentManager.getInstance(ChunkingMethod.class, hint);
+        } catch (ComponentLookupException e) {
+            throw new IndexException("The chunking method [%s] of the collection [%s] could not be loaded"
+                .formatted(hint, collection.getID()), e);
+        }
     }
 
     private static void validateChunkSizeAndOffset(int maxChunkSize, int offset) throws IndexException
@@ -170,53 +150,4 @@ public class ChunkingUtils
             throw new IndexException("The overlap offset must be smaller than half of the maximum chunk size");
         }
     }
-
-    private OptionalInt findGoodBoundaryAtEnd(String chunk, int minimumIndex)
-    {
-        // Try finding a nicer chunk boundary. Try the following options in order:
-        // 1. The start of a section in XWiki syntax or Markdown.
-        // 2. A blank line.
-        // 3. A linebreak.
-        // 4. The end of a sentence (". ").
-        // 5. Any space.
-        // Truncate to the first option that still gives a chunk that has at least half of the maximum size length.
-
-        Matcher matcher = HEADING_PATTERN.matcher(chunk);
-        int headingIndex = -1;
-        // Find the last heading.
-        while (matcher.find()) {
-            headingIndex = matcher.start(1);
-        }
-        if (headingIndex > minimumIndex) {
-            return OptionalInt.of(headingIndex);
-        } else {
-            for (String separator : SEPARATORS) {
-                int separatorIndex = chunk.lastIndexOf(separator) + separator.length();
-                if (separatorIndex > minimumIndex) {
-                    return OptionalInt.of(separatorIndex);
-                }
-            }
-        }
-
-        return OptionalInt.empty();
-    }
-
-    private OptionalInt findGoodBoundaryAtStart(String chunk, int maximumIndex)
-    {
-        Matcher matcher = HEADING_PATTERN.matcher(chunk);
-        int headingIndex = matcher.find() ? matcher.start() : Integer.MAX_VALUE;
-        if (headingIndex < maximumIndex) {
-            return OptionalInt.of(headingIndex);
-        } else {
-            for (String separator : SEPARATORS) {
-                int separatorIndex = chunk.indexOf(separator);
-                if (separatorIndex > -1 && separatorIndex < maximumIndex) {
-                    return OptionalInt.of(separatorIndex + separator.length());
-                }
-            }
-        }
-
-        return OptionalInt.empty();
-    }
-
 }

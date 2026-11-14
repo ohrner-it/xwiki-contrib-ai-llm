@@ -114,9 +114,9 @@ public interface Collection
     String getEmbeddingModel();
     
     /**
-     * Gets the chunking method used by the collection.
+     * Gets the chunking method used by the collection: the hint of a {@link ChunkingMethod} component.
      * 
-     * @return A string representing the chunking method.
+     * @return A string representing the chunking method, {@code maxChars} when the collection doesn't set one.
      */
     String getChunkingMethod();
 
@@ -205,7 +205,10 @@ public interface Collection
     /**
      * Sets the chunking method of the collection.
      * 
-     * @param chunkingMethod The chunking method of the collection.
+     * @param chunkingMethod The chunking method of the collection: the hint of an installed {@link ChunkingMethod}
+     *     component, blank for the default, or {@code null} to keep the current one; surrounding whitespace is
+     *     removed.
+     * @throws IndexException if the chunking method is changed to one that is not installed
      */
     void setChunkingMethod(String chunkingMethod) throws IndexException;
     

@@ -19,6 +19,7 @@
  */
 package org.xwiki.contrib.llm.script;
 
+import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +32,7 @@ import org.xwiki.component.annotation.Component;
 import org.xwiki.component.descriptor.ComponentDescriptor;
 import org.xwiki.component.manager.ComponentLookupException;
 import org.xwiki.component.manager.ComponentManager;
+import org.xwiki.contrib.llm.ChunkingMethod;
 import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.CollectionManager;
 import org.xwiki.contrib.llm.DocumentStore;
@@ -215,13 +217,29 @@ public class CollectionManagerScriptService implements ScriptService
     }
 
     /**
-     * @return the possible values for the {@code documentStore} property of a collection
+     * @return the possible values for the {@code documentStore} property of a collection, in alphabetical order
      */
     public List<String> getDocumentStoreValues()
     {
-        return this.componentManagerProvider.get().getComponentDescriptorList(DocumentStore.class)
+        return getRoleHints(DocumentStore.class);
+    }
+
+    /**
+     * @return the possible values for the {@code chunkingMethod} property of a collection: the hints of the
+     *     installed chunking methods, in alphabetical order
+     * @since 1.0.2
+     */
+    public List<String> getChunkingMethodValues()
+    {
+        return getRoleHints(ChunkingMethod.class);
+    }
+
+    private List<String> getRoleHints(Type role)
+    {
+        return this.componentManagerProvider.get().getComponentDescriptorList(role)
             .stream()
             .map(ComponentDescriptor::getRoleHint)
+            .sorted()
             .toList();
     }
 

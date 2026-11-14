@@ -1,0 +1,99 @@
+<?xml version="1.1" encoding="UTF-8"?>
+
+<!--
+ * See the NOTICE file distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the Free
+ * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+-->
+
+<xwikidoc version="1.5" reference="AI.Collections.Code.ComponentHintDisplayer" locale="">
+  <web>AI.Collections.Code</web>
+  <name>ComponentHintDisplayer</name>
+  <language/>
+  <defaultLanguage/>
+  <translation>0</translation>
+  <creator>xwiki:XWiki.Admin</creator>
+  <parent>AI.Collections.Code.WebHome</parent>
+  <author>xwiki:XWiki.Admin</author>
+  <contentAuthor>xwiki:XWiki.Admin</contentAuthor>
+  <version>1.1</version>
+  <title>Component Hint Displayer</title>
+  <comment/>
+  <minorEdit>false</minorEdit>
+  <syntaxId>xwiki/2.1</syntaxId>
+  <hidden>true</hidden>
+  <content>{{velocity output="false"}}
+## Displays a collection property whose value is the hint of a component, e.g. the document store or the chunking
+## method. Used as custom displayer through:
+##   {{include reference="AI.Collections.Code.ComponentHintDisplayer"/}}
+##   {{velocity}}#_aiLLMComponentHintDisplayer('aiLLM.index.chunkingMethod' $hints 'maxChars'){{/velocity}}
+## The hints are the values of the installed components. A stored hint whose component is not installed (any
+## more) is shown and kept selected, marked as not installed, so that saving the form never changes it silently.
+## The name of a hint is the translation with the key "${translationPrefix}.${hint}.name", or the hint itself.
+#macro (_aiLLMComponentHintName $translationPrefix $hint $installedHints $return)
+  #set ($aiLLMLocalizationKey = "${translationPrefix}.${hint}.name")
+  #if ($services.localization.get($aiLLMLocalizationKey))
+    #set ($aiLLMHintName = $services.localization.render($aiLLMLocalizationKey))
+  #else
+    #set ($aiLLMHintName = $hint)
+  #end
+  #if (!$installedHints.contains($hint))
+    #set ($aiLLMNotInstalledParameters = [$aiLLMHintName])
+    #set ($aiLLMNotInstalledKey = 'aiLLM.index.componentNotInstalled')
+    #set ($aiLLMHintName = $services.localization.render($aiLLMNotInstalledKey, $aiLLMNotInstalledParameters))
+  #end
+  ## #setVariable needs the name of the caller's variable, which "$return" gives only while that variable is null.
+  #set ($return = $NULL)
+  #setVariable("$return" $aiLLMHintName)
+#end
+#macro (_aiLLMComponentHintDisplayer $translationPrefix $installedHints $defaultHint)
+  #set ($aiLLMCurrentHint = "$!value")
+  #if ($stringtool.isBlank($aiLLMCurrentHint))
+    #set ($aiLLMCurrentHint = $defaultHint)
+  #end
+  #if ($type == 'view' || $type == 'search' || $type == 'rendered')
+    #_aiLLMComponentHintName($translationPrefix $aiLLMCurrentHint $installedHints $aiLLMHintLabel)
+    $services.rendering.escape($aiLLMHintLabel, 'xwiki/2.1')
+  #elseif ($type == 'edit')
+    #set ($aiLLMHints = [])
+    #set ($discard = $aiLLMHints.addAll($installedHints))
+    #if (!$aiLLMHints.contains($aiLLMCurrentHint))
+      #set ($discard = $aiLLMHints.add($aiLLMCurrentHint))
+    #end
+    #set ($aiLLMFieldName = "${prefix}${name}")
+    {{html clean="false"}}
+    &lt;select name="$escapetool.xml($aiLLMFieldName)" id="$escapetool.xml($aiLLMFieldName)"&gt;
+    #foreach ($aiLLMHint in $aiLLMHints)
+      #_aiLLMComponentHintName($translationPrefix $aiLLMHint $installedHints $aiLLMHintLabel)
+      #set ($aiLLMSelected = '')
+      #if ($aiLLMHint == $aiLLMCurrentHint)
+        #set ($aiLLMSelected = ' selected="selected"')
+      #end
+      &lt;option value="$escapetool.xml($aiLLMHint)"$aiLLMSelected&gt;$escapetool.xml($aiLLMHintLabel)&lt;/option&gt;
+    #end
+    &lt;/select&gt;
+    {{/html}}
+  #elseif ($type == 'hidden')
+    {{html clean="false"}}
+    $doc.displayHidden($field, $prefix, $object)
+    {{/html}}
+  #else
+    Unknown display mode.
+  #end
+#end
+{{/velocity}}</content>
+</xwikidoc>

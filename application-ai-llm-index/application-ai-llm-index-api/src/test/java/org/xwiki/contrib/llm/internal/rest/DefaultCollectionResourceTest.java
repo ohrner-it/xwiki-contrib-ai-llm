@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.xwiki.contrib.llm.ChunkingMethod;
 import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.CollectionManager;
 import org.xwiki.contrib.llm.Document;
@@ -47,6 +48,7 @@ import org.xwiki.contrib.llm.internal.DefaultCollection;
 import org.xwiki.contrib.llm.internal.DefaultCollectionManager;
 import org.xwiki.contrib.llm.internal.DefaultDocument;
 import org.xwiki.contrib.llm.internal.InternalDocumentStore;
+import org.xwiki.contrib.llm.internal.MaxCharsChunkingMethod;
 import org.xwiki.contrib.llm.internal.WriteAttribution;
 import org.xwiki.contrib.llm.internal.authorization.XWikiAuthorizationManagerBuilder;
 import org.xwiki.contrib.llm.internal.xwikistore.XWikiDocumentStore;
@@ -274,10 +276,11 @@ class DefaultCollectionResourceTest
     }
 
     @Test
-    void putCollection() throws XWikiRestException, IndexException
+    void putCollection() throws Exception
     {
         String id = "newcollection";
-        String chunkingMethod = "none";
+        String chunkingMethod = "sections";
+        this.oldcore.getMocker().registerMockComponent(ChunkingMethod.class, chunkingMethod);
         int chunkingMaxSize = 200;
 
         // Prepare a collection with some values.
@@ -445,7 +448,22 @@ class DefaultCollectionResourceTest
         assertEquals(401, exception.getResponse().getStatus());
 
         // Verify that the collection was not updated.
-        assertEquals("", getCollectionFromWiki(COLLECTION_1).getChunkingMethod());
+        assertEquals(MaxCharsChunkingMethod.NAME, getCollectionFromWiki(COLLECTION_1).getChunkingMethod());
+    }
+
+    @Test
+    void putCollectionWithAChunkingMethodThatIsNotInstalledFails() throws IndexException
+    {
+        JSONCollection collection = new JSONCollection();
+        collection.setChunkingMethod("missing");
+        WebApplicationException exception = assertThrows(WebApplicationException.class,
+            () -> this.collectionResource.putCollection(WIKI_NAME, COLLECTION_1, collection));
+
+        assertEquals(500, exception.getResponse().getStatus());
+        assertEquals("Error updating collection [collection1].", this.logCapture.getMessage(0));
+        assertEquals("The chunking method [missing] is not installed",
+            this.logCapture.getLogEvent(0).getThrowableProxy().getMessage());
+        assertEquals(MaxCharsChunkingMethod.NAME, getCollectionFromWiki(COLLECTION_1).getChunkingMethod());
     }
 
     @Test

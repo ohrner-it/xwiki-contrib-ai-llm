@@ -24,7 +24,9 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.xwiki.contrib.llm.ChunkingMethod;
 import org.xwiki.contrib.llm.Collection;
+import org.xwiki.contrib.llm.IndexException;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 import org.xwiki.test.junit5.mockito.MockComponent;
@@ -191,5 +193,64 @@ class DefaultCollectionTest
         classDocument.getXClass().addDBListField(DefaultCollection.DOCUMENT_SPACE_FIELDNAME, "Document spaces", 1,
             true, relationalStorage, "");
         this.oldcore.getSpyXWiki().saveDocument(classDocument, this.context);
+    }
+
+    @Test
+    void chunkingMethodIsMaxCharsWhenNotSet()
+    {
+        assertEquals("maxChars", this.collection.getChunkingMethod());
+    }
+
+    @Test
+    void setChunkingMethodStoresAnInstalledMethod() throws Exception
+    {
+        this.oldcore.getMocker().registerMockComponent(ChunkingMethod.class, "sections");
+
+        this.collection.setChunkingMethod("sections");
+
+        assertEquals("sections", this.collection.getChunkingMethod());
+    }
+
+    @Test
+    void setChunkingMethodRejectsAMethodThatIsNotInstalled()
+    {
+        IndexException exception =
+            assertThrows(IndexException.class, () -> this.collection.setChunkingMethod("missing"));
+
+        assertEquals("The chunking method [missing] is not installed", exception.getMessage());
+        assertEquals("maxChars", this.collection.getChunkingMethod());
+    }
+
+    @Test
+    void setChunkingMethodAcceptsTheUnchangedValueOfAMethodThatIsNoLongerInstalled() throws Exception
+    {
+        this.oldcore.getMocker().registerMockComponent(ChunkingMethod.class, "uninstalled");
+        this.collection.setChunkingMethod("uninstalled");
+        this.oldcore.getMocker().unregisterComponent(ChunkingMethod.class, "uninstalled");
+
+        this.collection.setChunkingMethod("uninstalled");
+
+        assertEquals("uninstalled", this.collection.getChunkingMethod());
+    }
+
+    @Test
+    void setChunkingMethodToABlankValueRestoresTheDefault() throws Exception
+    {
+        this.oldcore.getMocker().registerMockComponent(ChunkingMethod.class, "sections");
+        this.collection.setChunkingMethod("sections");
+
+        this.collection.setChunkingMethod("  ");
+
+        assertEquals("maxChars", this.collection.getChunkingMethod());
+    }
+
+    @Test
+    void setChunkingMethodRemovesSurroundingWhitespace() throws Exception
+    {
+        this.oldcore.getMocker().registerMockComponent(ChunkingMethod.class, "sections");
+
+        this.collection.setChunkingMethod(" sections ");
+
+        assertEquals("sections", this.collection.getChunkingMethod());
     }
 }
