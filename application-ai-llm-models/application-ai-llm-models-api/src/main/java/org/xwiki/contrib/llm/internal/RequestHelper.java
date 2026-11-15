@@ -28,6 +28,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -69,21 +70,14 @@ public class RequestHelper
      * @return the value returned by the body handler
      * @param <T> the type of the body
      * @param <R> the return type
+     * @throws InvalidTokenException if the configured token cannot be sent in an HTTP header
      * @throws IOException if the request fails
      */
     public <T, R> HttpResponse<R> post(GPTAPIConfig config, String path, T body,
         HttpResponse.BodyHandler<R> bodyHandler)
         throws IOException
     {
-        HttpClient httpClient = this.httpClientFactory.createHttpClient();
-        HttpRequest request = prepareRequest(path, config, body);
-
-        try {
-            return httpClient.send(request, bodyHandler);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException(e);
-        }
+        return send(prepareRequest(path, config, body, null), bodyHandler);
     }
 
     /**
@@ -91,15 +85,29 @@ public class RequestHelper
      *
      * @param config the configuration that provides the URL and the authentication token
      * @param path the path of the API endpoint
+     * @param timeout the maximum time to wait for the response
      * @param bodyHandler the handler that processes the response body
      * @return the value returned by the response handler
      * @param <R> the type of the body
+     * @throws InvalidTokenException if the configured token cannot be sent in an HTTP header
      * @throws IOException if the request fails
+     * @throws IllegalArgumentException if the configured URL is not an absolute HTTP or HTTPS URL
      */
-    public <R> HttpResponse<R> get(GPTAPIConfig config, String path,
+    public <R> HttpResponse<R> get(GPTAPIConfig config, String path, Duration timeout,
         HttpResponse.BodyHandler<R> bodyHandler) throws IOException
     {
-        return post(config, path, null, bodyHandler);
+        return send(prepareRequest(path, config, null, timeout), bodyHandler);
+    }
+
+    private <R> HttpResponse<R> send(HttpRequest request, HttpResponse.BodyHandler<R> bodyHandler) throws IOException
+    {
+        HttpClient httpClient = this.httpClientFactory.createHttpClient();
+        try {
+            return httpClient.send(request, bodyHandler);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException(e);
+        }
     }
 
     /**
@@ -135,14 +143,24 @@ public class RequestHelper
         }
     }
 
-    private <T> HttpRequest prepareRequest(String path, GPTAPIConfig config, T body) throws IOException
+    private <T> HttpRequest prepareRequest(String path, GPTAPIConfig config, T body, Duration timeout)
+        throws IOException
     {
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-            .uri(URI.create(config.getURL() + path))
-            .header("Authorization", BEARER + config.getToken())
+        HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(config.getURL() + path));
+        try {
+            builder = builder.header("Authorization", BEARER + config.getToken());
+        } catch (IllegalArgumentException e) {
+            // The message of this exception quotes the header value, i.e. the token, so it must not be passed on.
+            throw new InvalidTokenException();
+        }
+        builder = builder
             .header("Accept", APPLICATION_JSON)
             .header("Content-Type", APPLICATION_JSON)
             .header("User-Agent", "XWiki AI LLM Application");
+
+        if (timeout != null) {
+            builder = builder.timeout(timeout);
+        }
 
         if (body != null) {
             ObjectMapper objectMapper = new ObjectMapper();

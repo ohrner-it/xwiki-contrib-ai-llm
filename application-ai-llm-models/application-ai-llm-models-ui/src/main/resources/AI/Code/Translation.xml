@@ -69,6 +69,40 @@ llm.config.embeddingModels=Embedding models
 llm.config.delete=Delete
 llm.config.requestmode=Can Stream
 llm.config.groups=Group Allowed
+llm.config.test=Connection test
+llm.config.test.hint=The Test button checks the saved URL prefix and token of a server by requesting its list of models. \
+    Save your changes before testing them.
+llm.config.test.button=Test
+llm.config.test.server={0}:
+llm.config.test.testing=Testing the connection...
+llm.config.test.error=The test could not be performed. Reload the page and try again.
+# The outcome messages get the number of models as {0} (set for SUCCESS) and the HTTP status of the answer of the
+# server as {1} (set when the server answered).
+llm.config.test.outcome.SUCCESS=The connection works: the server answered and offers \
+    {0,choice,0#no models|1#one model|1&lt;{0,number,integer} models}.
+llm.config.test.outcome.CREDENTIALS_REJECTED=The server rejected the token (HTTP {1}). Check the token.
+llm.config.test.outcome.NOT_FOUND=The server has no list of models at the URL prefix (HTTP 404). Check the URL \
+    prefix: it usually ends with /v1/, including the final slash.
+llm.config.test.outcome.HTTP_ERROR=The server answered with the error status HTTP {1}. Check the URL prefix and the \
+    logs of the AI server.
+llm.config.test.outcome.INVALID_RESPONSE=The server answered, but not with an OpenAI-compatible list of models. \
+    Check the URL prefix.
+llm.config.test.outcome.UNREACHABLE=The server could not be reached. Check the host name and the port in the URL \
+    prefix, and that the server runs and accepts connections from the wiki server.
+llm.config.test.outcome.TIMEOUT=The server did not answer in time. Check the URL prefix and that the server runs.
+llm.config.test.outcome.TLS_ERROR=The secure connection to the server failed. Check that the URL prefix uses the \
+    right protocol (http or https) and that the wiki server trusts the certificate of the AI server.
+llm.config.test.outcome.INVALID_URL=The URL prefix is missing or invalid. Enter an absolute URL such as \
+    https://api.openai.com/v1/.
+llm.config.test.outcome.INVALID_TOKEN=The token contains characters that cannot be sent to the server, such as a \
+    line break or an invisible character copied along with it. Enter the token again.
+llm.config.test.outcome.CONNECTION_ERROR=The connection to the server failed. Check the URL prefix and the network \
+    connection of the wiki server.
+llm.config.test.outcome.FORBIDDEN=Only wiki administrators can test the AI server configurations.
+llm.config.test.outcome.INVALID_FORM_TOKEN=The test was refused because the form token is invalid or expired. \
+    Reload the page and try again.
+llm.config.test.outcome.UNKNOWN_SERVER=There is no saved server configuration with this name. Save the \
+    configuration before testing it.
 llm.quickaction.name=Generative AI
 llm.quickaction.hint=Insert content using Generative AI.
 
