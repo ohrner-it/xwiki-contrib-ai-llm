@@ -33,6 +33,7 @@ import org.apache.commons.lang3.LocaleUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.llm.CollectionManager;
+import org.xwiki.contrib.llm.HybridSearchParameters;
 import org.xwiki.contrib.llm.IndexException;
 import org.xwiki.contrib.llm.openai.Context;
 import org.xwiki.contrib.llm.rest.SearchResource;
@@ -84,7 +85,8 @@ public class DefaultSearchResource extends XWikiResource implements SearchResour
         List<String> collections,
         int limitKeywordResults,
         int limitSemanticResults,
-        String locale
+        String locale,
+        String minSemanticScore
     ) throws XWikiRestException
     {
         XWikiContext context = this.contextProvider.get();
@@ -96,23 +98,33 @@ public class DefaultSearchResource extends XWikiResource implements SearchResour
 
             this.validateLimit(limitKeywordResults);
             this.validateLimit(limitSemanticResults);
+            HybridSearchParameters parameters = getParameters(limitSemanticResults, limitKeywordResults,
+                parseLocale(locale), minSemanticScore);
 
             List<String> collectionsToSearch =
                 collections.isEmpty() ? this.collectionManager.getCollections() : collections;
 
             // Authorization is handled by the CollectionManager, only actually accessible collections are searched,
             // and results are filtered accordingly.
-            return this.collectionManager.hybridSearch(
-                query,
-                collectionsToSearch,
-                limitSemanticResults,
-                limitKeywordResults,
-                parseLocale(locale)
-            );
+            return this.collectionManager.hybridSearch(query, collectionsToSearch, parameters);
         } catch (IndexException e) {
             throw new XWikiRestException("Failed to search", e);
         } finally {
             context.setWikiId(currentWiki);
+        }
+    }
+
+    private HybridSearchParameters getParameters(int limitSemanticResults, int limitKeywordResults, Locale locale,
+        String minSemanticScore)
+    {
+        try {
+            double parsedMinSemanticScore =
+                StringUtils.isBlank(minSemanticScore) ? 0 : Double.parseDouble(minSemanticScore);
+            return new HybridSearchParameters(limitSemanticResults, limitKeywordResults, locale,
+                parsedMinSemanticScore);
+        } catch (IllegalArgumentException e) {
+            // Static message on purpose: the invalid value is not reflected back.
+            throw badRequest("The minSemanticScore parameter must be a number between 0 and 1.");
         }
     }
 

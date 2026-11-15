@@ -38,6 +38,7 @@ import org.xwiki.component.manager.ComponentLookupException;
 import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.Document;
 import org.xwiki.contrib.llm.DocumentStore;
+import org.xwiki.contrib.llm.HybridSearchParameters;
 import org.xwiki.contrib.llm.IndexException;
 import org.xwiki.contrib.llm.SolrConnector;
 import org.xwiki.contrib.llm.authorization.AuthorizationManager;
@@ -622,6 +623,40 @@ class DefaultCollectionManagerTest
         when(this.solrConnector.keywordSearch(any(), anyMap(), anyInt(), any())).thenReturn(List.of(first, second));
 
         assertEquals(List.of(first, second), this.collectionManager.hybridSearch(QUERY, List.of(COLLECTION_ID), 0, 3));
+    }
+
+    @Test
+    void semanticResultBelowTheMinimumScoreLosesOnlyItsSemanticContribution() throws Exception
+    {
+        createAndSavePublicInternalStoreCollection();
+        Context a = new Context(COLLECTION_ID, "document1", null, "url1", "a", 0.9, List.of());
+        Context bSemantic = new Context(COLLECTION_ID, "document2", null, "url2", "b", 0.6, List.of());
+        Context bKeyword = new Context(COLLECTION_ID, "document2", null, "url2", "b", 7.0, List.of());
+        // A keyword result below the minimum stays: the minimum only applies to the semantic search.
+        Context c = new Context(COLLECTION_ID, "document3", null, "url3", "c", 0.4, List.of());
+        when(this.solrConnector.similaritySearch(any(), any(), anyMap(), anyInt(), any()))
+            .thenReturn(List.of(a, bSemantic));
+        when(this.solrConnector.keywordSearch(any(), anyMap(), anyInt(), any())).thenReturn(List.of(bKeyword, c));
+
+        List<Context> result = this.collectionManager.hybridSearch(QUERY, List.of(COLLECTION_ID),
+            new HybridSearchParameters(4, 3, null, 0.7));
+
+        // Without the minimum, b would be first with 1/62 + 1/61. Without its semantic contribution, it ties with a at
+        // 1/61, both ranked first in their list, and a appears first.
+        assertEquals(List.of(withScore(a, 1.0 / 61), withScore(bKeyword, 1.0 / 61), withScore(c, 1.0 / 62)), result);
+    }
+
+    @Test
+    void semanticOnlySearchLeavesOutTheResultsBelowTheMinimumScore() throws Exception
+    {
+        createAndSavePublicInternalStoreCollection();
+        mockSearchResults("document1", "document2", "document3");
+
+        List<Context> result = this.collectionManager.hybridSearch(QUERY, List.of(COLLECTION_ID),
+            new HybridSearchParameters(4, 0, null, 0.9));
+
+        // The mocked scores are 1.0, 0.9 and 0.8: the minimum is inclusive.
+        assertEquals(List.of("document1", "document2"), result.stream().map(Context::documentId).toList());
     }
 
     @Test

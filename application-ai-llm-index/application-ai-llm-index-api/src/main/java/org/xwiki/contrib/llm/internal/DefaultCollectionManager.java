@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -41,6 +40,7 @@ import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.CollectionManager;
+import org.xwiki.contrib.llm.HybridSearchParameters;
 import org.xwiki.contrib.llm.IndexException;
 import org.xwiki.contrib.llm.SolrConnector;
 import org.xwiki.contrib.llm.authorization.AuthorizationManager;
@@ -238,15 +238,8 @@ public class DefaultCollectionManager implements CollectionManager
     }
 
     @Override
-    public List<Context> hybridSearch(String textQuery, List<String> collections, int limitSemanticSimilarity,
-        int limitKeywordSearch) throws IndexException
-    {
-        return hybridSearch(textQuery, collections, limitSemanticSimilarity, limitKeywordSearch, null);
-    }
-
-    @Override
-    public List<Context> hybridSearch(String textQuery, List<String> collections, int limitSemanticSimilarity,
-        int limitKeywordSearch, Locale locale) throws IndexException
+    public List<Context> hybridSearch(String textQuery, List<String> collections, HybridSearchParameters parameters)
+        throws IndexException
     {
         Map<String, DefaultCollection> collectionMap = getAccessibleCollections(collections);
 
@@ -269,18 +262,21 @@ public class DefaultCollectionManager implements CollectionManager
 
         try {
             List<Context> semanticResults = this.solrConnector.similaritySearch(textQuery, collectionEmbeddingModelMap,
-                collectionStoreHintMap, limitSemanticSimilarity, locale);
+                collectionStoreHintMap, parameters.limitSemanticSimilarity(), parameters.locale());
             List<Context> keywordResults = this.solrConnector.keywordSearch(textQuery,
-                collectionStoreHintMap, limitKeywordSearch, locale);
+                collectionStoreHintMap, parameters.limitKeywordSearch(), parameters.locale());
 
             // Authorize before merging, so that a duplicate in a document the user cannot view cannot hide the
             // viewable one.
             Map<String, Map<String, Boolean>> viewableDocuments = getViewableDocuments(
                 Stream.concat(semanticResults.stream(), keywordResults.stream()).toList(), authorizationManagerMap);
-            List<Context> viewableSemanticResults = filterViewable(semanticResults, viewableDocuments);
+            // The minimum applies before the fusion: a chunk below it can still come from the keyword search.
+            List<Context> viewableSemanticResults = filterViewable(semanticResults, viewableDocuments).stream()
+                .filter(context -> context.similarityScore() >= parameters.minSemanticScore())
+                .toList();
             List<Context> viewableKeywordResults = filterViewable(keywordResults, viewableDocuments);
 
-            if (limitSemanticSimilarity > 0 && limitKeywordSearch > 0) {
+            if (parameters.limitSemanticSimilarity() > 0 && parameters.limitKeywordSearch() > 0) {
                 return ReciprocalRankFusion.fuse(viewableSemanticResults, viewableKeywordResults);
             }
             Set<String> uniqueContent = new HashSet<>();

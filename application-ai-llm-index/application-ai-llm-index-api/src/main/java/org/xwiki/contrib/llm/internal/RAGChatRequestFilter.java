@@ -36,6 +36,7 @@ import org.xwiki.component.manager.ComponentLookupException;
 import org.xwiki.component.manager.ComponentManager;
 import org.xwiki.contrib.llm.AbstractChatRequestFilter;
 import org.xwiki.contrib.llm.CollectionManager;
+import org.xwiki.contrib.llm.HybridSearchParameters;
 import org.xwiki.contrib.llm.openai.ChatCompletionChunk;
 import org.xwiki.contrib.llm.openai.ChatCompletionChunkChoice;
 import org.xwiki.contrib.llm.openai.ChatCompletionRequest;
@@ -85,8 +86,7 @@ public class RAGChatRequestFilter extends AbstractChatRequestFilter
     private final List<String> collections;
     private final CollectionManager collectionManager;
     private final Provider<XWikiContext> contextProvider;
-    private final int maxSemanticResults;
-    private final int maxKeywordResults;
+    private final HybridSearchParameters searchParameters;
     private final String contextPrompt;
     private final String chunkTemplate;
     private final WikiReference wikiReference;
@@ -95,30 +95,27 @@ public class RAGChatRequestFilter extends AbstractChatRequestFilter
      * Constructor.
      *
      * @param collections the collections to use
-     * @param maxSemanticResults the maximum number of results to return
-     * @param maxKeywordResults the maximum number of keyword results to return
+     * @param searchParameters the parameters of the search in the collections; when neither the semantic nor the
+     *     keyword search has a limit greater than 0, the limits are 3 semantic and 7 keyword results
      * @param contextPrompt the context prompt
      * @param chunkTemplate the template of a chunk in the context prompt
      * @param wiki the wiki where the filter is defined
      * @param componentManager the component manager to get components from
      */
     public RAGChatRequestFilter(List<String> collections,
-        Integer maxSemanticResults,
-        Integer maxKeywordResults,
+        HybridSearchParameters searchParameters,
         String contextPrompt,
         String chunkTemplate,
         WikiReference wiki,
         ComponentManager componentManager) throws ComponentLookupException
     {
         this.collections = collections;
-        int initialMaxSemanticResults = maxSemanticResults != null ? maxSemanticResults : 0;
-        int initialMaxKeywordResults = maxKeywordResults != null ? maxKeywordResults : 0;
-        if (initialMaxKeywordResults + initialMaxSemanticResults <= 0) {
-            initialMaxKeywordResults = 7;
-            initialMaxSemanticResults = 3;
+        if (searchParameters.limitSemanticSimilarity() <= 0 && searchParameters.limitKeywordSearch() <= 0) {
+            this.searchParameters =
+                new HybridSearchParameters(3, 7, searchParameters.locale(), searchParameters.minSemanticScore());
+        } else {
+            this.searchParameters = searchParameters;
         }
-        this.maxSemanticResults = initialMaxSemanticResults;
-        this.maxKeywordResults = initialMaxKeywordResults;
         this.contextPrompt = contextPrompt;
         this.chunkTemplate = StringUtils.isBlank(chunkTemplate) ? DEFAULT_CHUNK_TEMPLATE : chunkTemplate;
         this.wikiReference = wiki;
@@ -250,8 +247,7 @@ public class RAGChatRequestFilter extends AbstractChatRequestFilter
         String currentWiki = context.getWikiId();
         try {
             context.setWikiId(this.wikiReference.getName());
-            return this.collectionManager.hybridSearch(message, this.collections, this.maxSemanticResults,
-                this.maxKeywordResults);
+            return this.collectionManager.hybridSearch(message, this.collections, this.searchParameters);
         } catch (Exception e) {
             LOGGER.error(ERROR_LOG_FORMAT, SIMILARITY_SEARCH_ERROR_MSG, ExceptionUtils.getRootCauseMessage(e));
             return Collections.emptyList();

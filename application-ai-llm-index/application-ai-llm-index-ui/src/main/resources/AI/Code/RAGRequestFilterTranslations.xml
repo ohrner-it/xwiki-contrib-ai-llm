@@ -37,7 +37,9 @@
   <syntaxId>plain/1.0</syntaxId>
   <hidden>true</hidden>
   <content>llm.rag.filterTitle=Context
-llm.rag.filterDescription=Answer the user's request using context from the configured collections.</content>
+llm.rag.filterDescription=Answer the user's request using context from the configured collections.
+AI.Code.RAGChatRequestFilterClass_minSemanticScore=Similarity search minimum score (number)
+AI.Code.RAGChatRequestFilterClass_minSemanticScore_hint=Results of the similarity search with a lower score are not used as context; the keyword search can still find them. The score is between 0 and 1: (1 + cosine similarity) / 2, so 0.7 means a cosine similarity of 0.4. Suitable values depend on the embedding model. Empty or 0: no minimum.</content>
   <object>
     <name>AI.Code.RAGRequestFilterTranslations</name>
     <number>0</number>

@@ -34,6 +34,7 @@ import org.xwiki.component.manager.ComponentLookupException;
 import org.xwiki.component.manager.ComponentManager;
 import org.xwiki.contrib.llm.ChatRequestFilter;
 import org.xwiki.contrib.llm.ChatRequestFilterBuilder;
+import org.xwiki.contrib.llm.HybridSearchParameters;
 import org.xwiki.model.reference.EntityReference;
 import org.xwiki.model.reference.LocalDocumentReference;
 
@@ -79,16 +80,23 @@ public class RAGChatRequestFilterBuilder implements ChatRequestFilterBuilder
             .map(o -> (String) o)
             .collect(Collectors.toList());
 
-        Integer maxResults = object.getIntValue("maxResults");
-        Integer maxKeywordResults = object.getIntValue("maxKeywordResults");
         String contextPrompt = object.getLargeStringValue("contextPrompt");
         String chunkTemplate = object.getLargeStringValue("chunkTemplate");
 
+        HybridSearchParameters searchParameters;
+        try {
+            searchParameters = new HybridSearchParameters(object.getIntValue("maxResults"),
+                object.getIntValue("maxKeywordResults"), null, object.getDoubleValue("minSemanticScore"));
+        } catch (IllegalArgumentException e) {
+            this.logger.error("Invalid configuration of the RAG chat request filter [{}]: [{}]", object.getReference(),
+                e.getMessage());
+            return List.of();
+        }
 
         // Only return a filter if there are collections to filter on.
         try {
             return collections.isEmpty() ? List.of()
-                : List.of(new RAGChatRequestFilter(collections, maxResults, maxKeywordResults, contextPrompt,
+                : List.of(new RAGChatRequestFilter(collections, searchParameters, contextPrompt,
                 chunkTemplate, object.getDocumentReference().getWikiReference(), this.componentManagerProvider.get()));
         } catch (ComponentLookupException e) {
             this.logger.error("Error building RAG chat request filter for [{}]", object.getReference(), e);

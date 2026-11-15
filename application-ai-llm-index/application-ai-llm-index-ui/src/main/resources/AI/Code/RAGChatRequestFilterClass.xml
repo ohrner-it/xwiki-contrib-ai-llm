@@ -53,7 +53,7 @@
       <editor>PureText</editor>
       <hint>The template that is used for displaying a search result in the context. The placeholders {{url}}, {{index}} and {{content}} are replaced by the URL, index (1-based position in the result list), and content of the chunk, respectively. If the template is empty, a default template will be used.</hint>
       <name>chunkTemplate</name>
-      <number>5</number>
+      <number>6</number>
       <picker>0</picker>
       <prettyName>Chunk Template</prettyName>
       <restricted>0</restricted>
@@ -105,7 +105,7 @@ and stringprop.id.name='id'</sql>
       <editor>PureText</editor>
       <hint>Sets the system message. Use the keyword {{search_results}} anywhare in your prompt to inject the search results there. If the keyword is missing the search results will be automatically added at the end. If Property is empty a default prompt will be used.</hint>
       <name>contextPrompt</name>
-      <number>4</number>
+      <number>5</number>
       <picker>0</picker>
       <prettyName>Context prompt</prettyName>
       <restricted>0</restricted>
@@ -144,6 +144,20 @@ and stringprop.id.name='id'</sql>
       <validationRegExp/>
       <classType>com.xpn.xwiki.objects.classes.NumberClass</classType>
     </maxResults>
+    <minSemanticScore>
+      <customDisplay/>
+      <disabled>0</disabled>
+      <hint>Results of the similarity search with a lower score are not used as context; the keyword search can still find them. The score is between 0 and 1: (1 + cosine similarity) / 2, so 0.7 means a cosine similarity of 0.4. Suitable values depend on the embedding model. Empty or 0: no minimum.</hint>
+      <name>minSemanticScore</name>
+      <number>4</number>
+      <numberType>double</numberType>
+      <prettyName>Similarity search minimum score (number)</prettyName>
+      <size>30</size>
+      <unmodifiable>0</unmodifiable>
+      <validationMessage/>
+      <validationRegExp/>
+      <classType>com.xpn.xwiki.objects.classes.NumberClass</classType>
+    </minSemanticScore>
   </class>
   <object>
     <name>AI.Code.RAGChatRequestFilterClass</name>

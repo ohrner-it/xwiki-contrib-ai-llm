@@ -118,16 +118,8 @@ public interface CollectionManager
 
     /**
      * Perform a hybrid semantic similarity and keyword-based search, optionally restricted to chunks stored in a
-     * given content language. Only chunks of documents the current user may view are returned, each content once.
-     *
-     * <p>Implementations that perform both searches (both limits greater than 0) merge the results by reciprocal rank
-     * fusion, as the scores of the two searches are on unrelated scales: a chunk scores {@code 1 / (60 + rank)} for
-     * each search that found it, and the results are ordered by that sum, which is their similarity score. When only
-     * one search is performed, the results keep the order and score of that search: the cosine similarity as
-     * {@code (1 + cos) / 2} for the semantic search, the BM25 score for the keyword search.</p>
-     *
-     * <p>The default implementation ignores the locale and returns the results of
-     * {@link #similaritySearch(String, List, int)}; implementations that support the locale filter override it.</p>
+     * given content language, as {@link #hybridSearch(String, List, HybridSearchParameters)} without minimum semantic
+     * score.
      *
      * @param textQuery the text query
      * @param collections the collections to search in
@@ -142,8 +134,31 @@ public interface CollectionManager
     default List<Context> hybridSearch(String textQuery, List<String> collections, int limitSemanticSimilarity,
         int limitKeywordSearch, Locale locale) throws IndexException
     {
-        return similaritySearch(textQuery, collections, limitSemanticSimilarity + limitKeywordSearch);
+        return hybridSearch(textQuery, collections,
+            new HybridSearchParameters(limitSemanticSimilarity, limitKeywordSearch, locale, 0));
     }
+
+    /**
+     * Perform a hybrid semantic similarity and keyword-based search. Only chunks of documents the current user may view
+     * are returned, each content once. Results of the semantic search below the minimum semantic score are left out
+     * before the results are merged.
+     *
+     * <p>When both searches are performed (both limits greater than 0), the results are merged by reciprocal rank
+     * fusion, as the scores of the two searches are on unrelated scales: a chunk scores {@code 1 / (60 + rank)} for
+     * each search that found it, and the results are ordered by that sum, which is their similarity score. When only
+     * one search is performed, the results keep the order and score of that search: the cosine similarity as
+     * {@code (1 + cos) / 2} for the semantic search, the BM25 score for the keyword search.</p>
+     *
+     * @param textQuery the text query
+     * @param collections the collections to search in
+     * @param parameters the limits, the content language and the minimum semantic score of the search
+     * @return the context chunks matching the query
+     * @throws IndexException if the search fails
+     * @since 1.0.1
+     */
+    @Unstable
+    List<Context> hybridSearch(String textQuery, List<String> collections, HybridSearchParameters parameters)
+        throws IndexException;
 
     /**
      * @param collections the collections to filter
