@@ -368,7 +368,10 @@ class DefaultCollectionManagerTest
             ? this.collectionManager.hybridSearch("query", List.of(COLLECTION_ID, collectionId2), 4, 3)
             : this.collectionManager.hybridSearch("query", List.of(COLLECTION_ID, collectionId2), 4, 3, locale);
 
-        List<Context> expected = List.of(contextList.get(0), contextList.get(1), contextList.get(3));
+        // Reciprocal rank fusion (k = 60) over the authorized lists: content3 is second in the semantic list and first
+        // in the keyword list, content4 first in the semantic list only, content1 second in the keyword list only.
+        List<Context> expected = List.of(withScore(contextList.get(1), 1.0 / 62 + 1.0 / 61),
+            withScore(contextList.get(0), 1.0 / 61), withScore(contextList.get(3), 1.0 / 62));
         assertEquals(expected, result);
 
         // The collections have no stored document store: each one is searched in the internal store only.
@@ -376,6 +379,9 @@ class DefaultCollectionManagerTest
             Map.of(COLLECTION_ID, InternalDocumentStore.NAME, collectionId2, InternalDocumentStore.NAME);
         verify(this.solrConnector).similaritySearch("query", embeddingModelMap, storeHintMap, 4, locale);
         verify(this.solrConnector).keywordSearch("query", storeHintMap, 3, locale);
+        // Rights are checked once per collection, for the results of both searches together.
+        verify(authorization1).canView(any());
+        verify(authorization2).canView(any());
     }
 
     @Test
@@ -551,14 +557,7 @@ class DefaultCollectionManagerTest
     @Test
     void hybridSearchWithInternalStoreAndPublicMethodDoesNotCheckPages() throws Exception
     {
-        XWikiContext context = this.oldcore.getXWikiContext();
-        context.setWikiId(WIKI_NAME);
-        mockCollectionsQuery(List.of());
-        DefaultCollection collection = this.collectionManager.createCollection(COLLECTION_ID);
-        collection.setRightsCheckMethod("public");
-        collection.setEmbeddingModel(EMBEDDING_MODEL);
-        collection.setAllowGuests(true);
-        collection.save();
+        createAndSavePublicInternalStoreCollection();
         mockSearchResults("document1", "document2");
 
         List<Context> result = this.collectionManager.hybridSearch(QUERY, List.of(COLLECTION_ID), 4, 3);
@@ -587,14 +586,7 @@ class DefaultCollectionManagerTest
     @Test
     void hybridSearchWithADuplicatedCollectionIdSearchesTheCollectionOnce() throws Exception
     {
-        XWikiContext context = this.oldcore.getXWikiContext();
-        context.setWikiId(WIKI_NAME);
-        mockCollectionsQuery(List.of());
-        DefaultCollection collection = this.collectionManager.createCollection(COLLECTION_ID);
-        collection.setRightsCheckMethod("public");
-        collection.setEmbeddingModel(EMBEDDING_MODEL);
-        collection.setAllowGuests(true);
-        collection.save();
+        createAndSavePublicInternalStoreCollection();
         mockSearchResults("document1");
 
         // A REST or MCP caller may name the same collection twice.
@@ -606,6 +598,46 @@ class DefaultCollectionManagerTest
         verify(this.solrConnector)
             .similaritySearch(QUERY, Map.of(COLLECTION_ID, EMBEDDING_MODEL), storeHintMap, 4, null);
         verify(this.solrConnector).keywordSearch(QUERY, storeHintMap, 3, null);
+    }
+
+    @Test
+    void semanticOnlyHybridSearchKeepsTheRawScores() throws Exception
+    {
+        createAndSavePublicInternalStoreCollection();
+        mockSearchResults("document1", "document2");
+
+        List<Context> result = this.collectionManager.hybridSearch(QUERY, List.of(COLLECTION_ID), 4, 0);
+
+        assertEquals(List.of(new Context(COLLECTION_ID, "document1", null, "url0", "content0", 1.0, List.of(0.1f)),
+            new Context(COLLECTION_ID, "document2", null, "url1", "content1", 0.9, List.of(0.1f))), result);
+    }
+
+    @Test
+    void keywordOnlyHybridSearchKeepsTheRawScores() throws Exception
+    {
+        createAndSavePublicInternalStoreCollection();
+        Context first = new Context(COLLECTION_ID, "document1", null, "url1", "content1", 12.5, List.of());
+        Context second = new Context(COLLECTION_ID, "document2", null, "url2", "content2", 3.25, List.of());
+        when(this.solrConnector.similaritySearch(any(), any(), anyMap(), anyInt(), any())).thenReturn(List.of());
+        when(this.solrConnector.keywordSearch(any(), anyMap(), anyInt(), any())).thenReturn(List.of(first, second));
+
+        assertEquals(List.of(first, second), this.collectionManager.hybridSearch(QUERY, List.of(COLLECTION_ID), 0, 3));
+    }
+
+    @Test
+    void duplicateContentInADocumentTheUserCannotViewDoesNotHideTheViewableOne() throws Exception
+    {
+        createAndSaveXWikiStoreCollection("public");
+        mockViewRight(VIEWABLE_REFERENCE, true);
+        mockViewRight(DENIED_REFERENCE, false);
+        Context denied = new Context(COLLECTION_ID, DENIED_TRANSLATION_ID, null, "url0", "same", 0.9, List.of());
+        Context viewable = new Context(COLLECTION_ID, VIEWABLE_ID, null, "url1", "same", 0.8, List.of());
+        when(this.solrConnector.similaritySearch(any(), any(), anyMap(), anyInt(), any()))
+            .thenReturn(List.of(denied, viewable));
+
+        List<Context> result = this.collectionManager.hybridSearch(QUERY, List.of(COLLECTION_ID), 4, 0);
+
+        assertEquals(List.of(viewable), result);
     }
 
     private void createAndSaveXWikiStoreCollection(String rightsCheckMethod) throws Exception
@@ -660,5 +692,23 @@ class DefaultCollectionManagerTest
         } catch (IndexException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private void createAndSavePublicInternalStoreCollection() throws Exception
+    {
+        XWikiContext context = this.oldcore.getXWikiContext();
+        context.setWikiId(WIKI_NAME);
+        mockCollectionsQuery(List.of());
+        DefaultCollection collection = this.collectionManager.createCollection(COLLECTION_ID);
+        collection.setRightsCheckMethod("public");
+        collection.setEmbeddingModel(EMBEDDING_MODEL);
+        collection.setAllowGuests(true);
+        collection.save();
+    }
+
+    private static Context withScore(Context context, double score)
+    {
+        return new Context(context.collectionId(), context.documentId(), context.language(), context.url(),
+            context.content(), score, context.vector());
     }
 }

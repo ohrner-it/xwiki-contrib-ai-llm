@@ -118,9 +118,15 @@ public interface CollectionManager
 
     /**
      * Perform a hybrid semantic similarity and keyword-based search, optionally restricted to chunks stored in a
-     * given content language.
+     * given content language. Only chunks of documents the current user may view are returned, each content once.
      *
-     * <p>The default implementation ignores the locale and delegates to
+     * <p>Implementations that perform both searches (both limits greater than 0) merge the results by reciprocal rank
+     * fusion, as the scores of the two searches are on unrelated scales: a chunk scores {@code 1 / (60 + rank)} for
+     * each search that found it, and the results are ordered by that sum, which is their similarity score. When only
+     * one search is performed, the results keep the order and score of that search: the cosine similarity as
+     * {@code (1 + cos) / 2} for the semantic search, the BM25 score for the keyword search.</p>
+     *
+     * <p>The default implementation ignores the locale and returns the results of
      * {@link #similaritySearch(String, List, int)}; implementations that support the locale filter override it.</p>
      *
      * @param textQuery the text query

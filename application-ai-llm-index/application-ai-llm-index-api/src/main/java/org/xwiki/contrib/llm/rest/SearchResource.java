@@ -20,6 +20,7 @@
 package org.xwiki.contrib.llm.rest;
 
 import java.util.List;
+import java.util.Locale;
 
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.POST;
@@ -27,6 +28,7 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.QueryParam;
 
+import org.xwiki.contrib.llm.CollectionManager;
 import org.xwiki.contrib.llm.openai.Context;
 import org.xwiki.rest.XWikiRestException;
 import org.xwiki.stability.Unstable;
@@ -57,7 +59,8 @@ public interface SearchResource
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
      *     language field, e.g., {@code fr}), when empty all languages are searched (parameter available since
      *     0.10)
-     * @return a list of context chunks that are similar to the query
+     * @return a list of context chunks that are similar to the query, ordered and scored as described by
+     *     {@link CollectionManager#hybridSearch(String, List, int, int, Locale)}
      * @throws XWikiRestException if an error occurs
      */
     @POST

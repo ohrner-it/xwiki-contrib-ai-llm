@@ -36,7 +36,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
  * @param language the language of the context document, or {@code null} when unknown
  * @param url the URL of the context document
  * @param content the content of the context document
- * @param similarityScore the similarity score between the conversation and the context document
+ * @param similarityScore the similarity score between the conversation and the context document; for the results
+ *     of a collection search, as defined by the hybrid search of the collection manager of the index application
  * @param vector (optional) the vector embedding of the context document
  *
  * @version $Id$
