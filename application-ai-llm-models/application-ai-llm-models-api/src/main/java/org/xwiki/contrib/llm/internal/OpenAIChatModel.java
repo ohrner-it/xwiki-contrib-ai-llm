@@ -91,8 +91,7 @@ public class OpenAIChatModel extends AbstractModel implements ChatRequestFilter
     {
         GPTAPIConfig config = this.getConfig();
         if (Boolean.TRUE.equals(config.getCanStream())) {
-            // Set the model to the model in the configuration
-            ChatCompletionRequest adaptedRequest = setModel(request, true,
+            ChatCompletionRequest adaptedRequest = adaptRequest(request, true,
                 // Only include the stream options when calling the OpenAI API as other providers do not seem to like
                 // it (in particular, Fireworks and Mistral).
                 StringUtils.startsWith(config.getURL(), "https://api.openai.com"));
@@ -172,11 +171,19 @@ public class OpenAIChatModel extends AbstractModel implements ChatRequestFilter
         return new RequestError(code, providerMessage);
     }
 
-    private ChatCompletionRequest setModel(ChatCompletionRequest request, boolean stream, boolean supportsUsage)
+    /**
+     * Adapt the request of the client to the model configuration. The configured reasoning effort replaces the one of
+     * the request so that administrators can limit the cost of reasoning models; without one, the request's value is
+     * sent.
+     */
+    private ChatCompletionRequest adaptRequest(ChatCompletionRequest request, boolean stream, boolean supportsUsage)
     {
         ChatCompletionRequest.Builder builder = request.but()
             .model(this.modelConfiguration.getModel())
             .stream(stream);
+        if (this.modelConfiguration.getReasoningEffort() != null) {
+            builder.reasoningEffort(this.modelConfiguration.getReasoningEffort());
+        }
         if (stream && supportsUsage) {
             // Default usage information to true as it just makes a lot of sense to have it.
             builder.streamOptions(new StreamOptions(true));
@@ -190,7 +197,7 @@ public class OpenAIChatModel extends AbstractModel implements ChatRequestFilter
     @Override
     public ChatCompletionResult process(ChatCompletionRequest request) throws IOException
     {
-        ChatCompletionRequest adaptedRequest = setModel(request, false, false);
+        ChatCompletionRequest adaptedRequest = adaptRequest(request, false, false);
         HttpResponse<String> httpResponse = this.requestHelper.post(this.getConfig(),
             PATH, adaptedRequest, HttpResponse.BodyHandlers.ofString());
         String body = httpResponse.body();

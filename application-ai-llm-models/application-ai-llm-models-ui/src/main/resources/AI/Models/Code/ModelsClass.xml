@@ -54,7 +54,7 @@
       <displayType/>
       <hint/>
       <name>allowGuests</name>
-      <number>10</number>
+      <number>11</number>
       <prettyName>Allow guests to access the model</prettyName>
       <unmodifiable>0</unmodifiable>
       <validationMessage/>
@@ -128,7 +128,7 @@
       <largeStorage>0</largeStorage>
       <multiSelect>1</multiSelect>
       <name>groups</name>
-      <number>9</number>
+      <number>10</number>
       <picker>0</picker>
       <prettyName>Group</prettyName>
       <relationalStorage>0</relationalStorage>
@@ -147,7 +147,7 @@
       <disabled>0</disabled>
       <hint>AI.Models.Code.ModelsClass_maximumParallelism_hint</hint>
       <name>maximumParallelism</name>
-      <number>8</number>
+      <number>9</number>
       <numberType>long</numberType>
       <prettyName>Maximum Parallelism</prettyName>
       <size>30</size>
@@ -170,6 +170,20 @@
       <validationRegExp/>
       <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
     </model>
+    <reasoningEffort>
+      <customDisplay/>
+      <disabled>0</disabled>
+      <hint>AI.Models.Code.ModelsClass_reasoningEffort_hint</hint>
+      <name>reasoningEffort</name>
+      <number>8</number>
+      <picker>0</picker>
+      <prettyName>Reasoning effort</prettyName>
+      <size>30</size>
+      <unmodifiable>0</unmodifiable>
+      <validationMessage/>
+      <validationRegExp/>
+      <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+    </reasoningEffort>
     <serverName>
       <cache>0</cache>
       <classname>AI.Code.AIConfigClass</classname>

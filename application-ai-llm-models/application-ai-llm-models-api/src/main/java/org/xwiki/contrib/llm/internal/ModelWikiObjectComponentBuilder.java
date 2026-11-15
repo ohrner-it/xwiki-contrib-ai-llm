@@ -97,6 +97,11 @@ public class ModelWikiObjectComponentBuilder implements WikiObjectComponentBuild
     private static final String CONTEXT_SIZE_FIELD = "contextSize";
 
     /**
+     * The name of the field containing the reasoning effort.
+     */
+    private static final String REASONING_EFFORT_FIELD = "reasoningEffort";
+
+    /**
      * The name of the field containing the dimensions.
      */
     private static final String DIMENSIONS_FIELD = "dimensions";
@@ -228,6 +233,7 @@ public class ModelWikiObjectComponentBuilder implements WikiObjectComponentBuild
         modelConfiguration.setEmbeddingQueryPrefix(xObject.getStringValue(EMBEDDING_QUERY_PREFIX));
         modelConfiguration.setDimensions(xObject.getIntValue(DIMENSIONS_FIELD));
         modelConfiguration.setContextSize(xObject.getIntValue(CONTEXT_SIZE_FIELD));
+        modelConfiguration.setReasoningEffort(StringUtils.trimToNull(xObject.getStringValue(REASONING_EFFORT_FIELD)));
         modelConfiguration.setMaximumParallelism(xObject.getIntValue(MAXIMUM_PARALLELISM_FIELD, 100));
         modelConfiguration.setId(this.localEntityReferenceSerializer.serialize(xObject.getDocumentReference()));
         modelConfiguration.setName(xObject.getOwnerDocument().getTitle());
