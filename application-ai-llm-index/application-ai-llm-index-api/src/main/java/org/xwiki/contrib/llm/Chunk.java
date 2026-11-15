@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.component.annotation.InstantiationStrategy;
 import org.xwiki.component.descriptor.ComponentInstantiationStrategy;
+import org.xwiki.stability.Unstable;
 import org.xwiki.user.UserReference;
 
 /**
@@ -55,6 +56,8 @@ public class Chunk
     private double[] embeddings;
     private String errorMessage;
     private String storeHint;
+    private boolean translation;
+    private List<String> translationLocales = List.of();
 
     @Inject
     private Logger logger;
@@ -122,6 +125,48 @@ public class Chunk
     public void setStoreHint(String storeHint)
     {
         this.storeHint = storeHint;
+    }
+
+    /**
+     * @return whether the document of this chunk is a translation, see {@link Document#isTranslation()}
+     * @since 1.0.1
+     */
+    @Unstable
+    public boolean isTranslation()
+    {
+        return this.translation;
+    }
+
+    /**
+     * @param translation whether the document of this chunk is a translation, see {@link Document#isTranslation()}
+     * @since 1.0.1
+     */
+    @Unstable
+    public void setTranslation(boolean translation)
+    {
+        this.translation = translation;
+    }
+
+    /**
+     * @return the locales of the translations of the document of this chunk, see
+     *     {@link Document#getTranslationLocales()}, sorted
+     * @since 1.0.1
+     */
+    @Unstable
+    public List<String> getTranslationLocales()
+    {
+        return this.translationLocales;
+    }
+
+    /**
+     * @param translationLocales the locales of the translations of the document of this chunk, see
+     *     {@link Document#getTranslationLocales()}, sorted
+     * @since 1.0.1
+     */
+    @Unstable
+    public void setTranslationLocales(List<String> translationLocales)
+    {
+        this.translationLocales = List.copyOf(translationLocales);
     }
 
     /**
@@ -387,6 +432,8 @@ public class Chunk
             .append(getEmbeddings(), chunk.getEmbeddings())
             .append(getErrorMessage(), chunk.getErrorMessage())
             .append(getStoreHint(), chunk.getStoreHint())
+            .append(isTranslation(), chunk.isTranslation())
+            .append(getTranslationLocales(), chunk.getTranslationLocales())
             .isEquals();
     }
 
@@ -406,6 +453,8 @@ public class Chunk
             .append(getEmbeddings())
             .append(getErrorMessage())
             .append(getStoreHint())
+            .append(isTranslation())
+            .append(getTranslationLocales())
             .toHashCode();
     }
 }

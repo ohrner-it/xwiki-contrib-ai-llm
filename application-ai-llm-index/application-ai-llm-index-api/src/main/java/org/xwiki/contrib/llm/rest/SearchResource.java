@@ -57,8 +57,9 @@ public interface SearchResource
      * @param limitKeywordResults the maximum number of results to return for the keyword search
      * @param limitSemanticResults the maximum number of results to return for the semantic search
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
-     *     language field, e.g., {@code fr}), when empty all languages are searched (parameter available since
-     *     0.10)
+     *     language field, e.g., {@code fr}), when empty the version of each document for the locale of the request,
+     *     see {@link CollectionManager#hybridSearch(String, List, org.xwiki.contrib.llm.HybridSearchParameters)}
+     *     (parameter available since 0.10)
      * @param minSemanticScore the minimum similarity score of a result of the semantic search, a number between 0 and 1
      *     on the scale {@code (1 + cos) / 2} of the cosine similarity; when empty, there is no minimum (parameter
      *     available since 1.0.1)

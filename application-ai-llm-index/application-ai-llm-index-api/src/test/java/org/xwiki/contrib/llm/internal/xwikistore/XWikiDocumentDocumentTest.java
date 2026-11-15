@@ -46,6 +46,7 @@ import org.xwiki.test.junit5.mockito.ComponentTest;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 import org.xwiki.test.junit5.mockito.MockComponent;
 
+import com.xpn.xwiki.XWiki;
 import com.xpn.xwiki.XWikiException;
 import com.xpn.xwiki.doc.XWikiAttachment;
 import com.xpn.xwiki.doc.XWikiDocument;
@@ -59,6 +60,7 @@ import com.xpn.xwiki.test.reference.ReferenceComponentList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -88,6 +90,9 @@ class XWikiDocumentDocumentTest
 
     @MockComponent
     private GeneralMailConfiguration generalMailConfiguration;
+
+    @MockComponent
+    private XWikiDocumentStoreHelper storeHelper;
 
     @Mock
     private XWikiDocument xWikiDocument;
@@ -202,6 +207,16 @@ class XWikiDocumentDocumentTest
         when(this.xWikiDocument.getLocale()).thenReturn(Locale.ROOT);
         when(this.xWikiDocument.getDefaultLocale()).thenReturn(Locale.GERMAN);
         assertEquals("de", this.xWikiDocumentDocument.getLanguage());
+    }
+
+    @Test
+    void translationFieldsComeFromTheVersionAndTheStoreHelper() throws Exception
+    {
+        when(this.xWikiDocument.getLocale()).thenReturn(Locale.GERMAN);
+        when(this.storeHelper.getVisibleTranslationLocales(this.xWikiDocument)).thenReturn(List.of(Locale.GERMAN));
+
+        assertTrue(this.xWikiDocumentDocument.isTranslation());
+        assertEquals(List.of(Locale.GERMAN), this.xWikiDocumentDocument.getTranslationLocales());
     }
 
     @Test

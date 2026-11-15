@@ -20,7 +20,10 @@
 package org.xwiki.contrib.llm;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.inject.Provider;
 
@@ -34,6 +37,7 @@ import org.xwiki.test.junit5.mockito.MockComponent;
 import com.xpn.xwiki.XWikiContext;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 /**
@@ -142,6 +146,23 @@ class ChunkingUtilsTest
         for (Map.Entry<Integer, Chunk> entry : actualChunks.entrySet()) {
             assertEquals(expectedChunks.get(entry.getKey()), entry.getValue().getContent());
         }
+    }
+
+    @Test
+    void chunksCarryTheTranslationFieldsOfTheirDocument() throws Exception
+    {
+        when(this.mockCollection.getChunkingMaxSize()).thenReturn(60);
+        when(this.mockCollection.getChunkingOverlapOffset()).thenReturn(0);
+        when(this.mockDocument.isTranslation()).thenReturn(true);
+        when(this.mockDocument.getTranslationLocales()).thenReturn(List.of(Locale.GERMAN, Locale.ENGLISH));
+
+        List<Chunk> chunks = this.chunkingUtils.chunkDocument(this.mockCollection, this.mockDocument);
+
+        assertEquals(7, chunks.size());
+        // Sorted, so that a chunk compares equal to the stored one whatever the order of the translations.
+        assertEquals(Set.of(List.of("de", "en")),
+            chunks.stream().map(Chunk::getTranslationLocales).collect(Collectors.toSet()));
+        assertTrue(chunks.stream().allMatch(Chunk::isTranslation));
     }
 
     @Test

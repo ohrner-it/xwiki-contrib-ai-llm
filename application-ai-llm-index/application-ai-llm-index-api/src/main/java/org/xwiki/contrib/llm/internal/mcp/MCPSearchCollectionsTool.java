@@ -108,7 +108,9 @@ public class MCPSearchCollectionsTool implements MCPTool
         .string(LOCALE_PARAM, "Optional content language filter, e.g. " + MCPToolSupport.LOCALE_FORMS
             + ". Exact match on the stored language of each chunk: \"fr\" does not match \"fr_BR\" chunks; use "
             + "the underscore form for regional variants. Documents uploaded through the REST API carry "
-            + "uploader-typed language metadata, so junk values simply never match.")
+            + "uploader-typed language metadata, so junk values simply never match. Without it, a page that "
+            + "exists in several languages is returned once, in the language of the request (usually the default "
+            + "language of the wiki): pass a locale to search another language.")
         .integer(LIMIT_KEYWORD_PARAM, "Maximum number of keyword search results (default: %d)".formatted(
             DEFAULT_LIMIT))
         .integer(LIMIT_SEMANTIC_PARAM, "Maximum number of semantic similarity results (default: %d)".formatted(

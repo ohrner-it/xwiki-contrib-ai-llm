@@ -126,7 +126,8 @@ public interface CollectionManager
      * @param limitSemanticSimilarity the maximum number of results to return from a semantic similarity search
      * @param limitKeywordSearch the maximum number of results to return for the keyword search
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
-     *     language field), or {@code null} to search all languages
+     *     language field), or {@code null} for the version of each document for the locale of the request, see
+     *     {@link CollectionManager#hybridSearch(String, List, HybridSearchParameters)}
      * @return the context chunks matching the query
      * @since 0.10
      */
@@ -142,6 +143,13 @@ public interface CollectionManager
      * Perform a hybrid semantic similarity and keyword-based search. Only chunks of documents the current user may view
      * are returned, each content once. Results of the semantic search below the minimum semantic score are left out
      * before the results are merged.
+     *
+     * <p>Without a content language, the search returns, of each document indexed in several languages, only the
+     * language version for the locale of the current request, as {@code XWikiDocument#getTranslatedDocument} chooses
+     * it: the translation in that locale, otherwise in a more general locale of it ({@code de} for {@code de_AT}),
+     * otherwise the default version (see {@link Document#isTranslation()} and
+     * {@link Document#getTranslationLocales()}). Chunks indexed before this version of the application are returned in
+     * every language until they are indexed again, and so are all versions when the request has no locale.</p>
      *
      * <p>When both searches are performed (both limits greater than 0), the results are merged by reciprocal rank
      * fusion, as the scores of the two searches are on unrelated scales: a chunk scores {@code 1 / (60 + rank)} for

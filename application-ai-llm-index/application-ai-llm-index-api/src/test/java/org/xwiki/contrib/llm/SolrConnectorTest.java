@@ -35,6 +35,7 @@ import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
+import org.apache.solr.common.SolrInputDocument;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -94,6 +95,10 @@ class SolrConnectorTest
 
     private static final String STORE_HINT_FIELD = "storeHint";
 
+    // The German translation, otherwise the default version; chunks without translation fields match.
+    private static final String GERMAN_VERSION_FILTER = "(isTranslation:true AND language:escaped(de))"
+        + " OR (isTranslation:false AND -translations:(escaped(de))) OR (*:* AND -isTranslation:[* TO *])";
+
     private static final String MIXED_STORE_FILTER_QUERY =
         "(collection:escaped(internalCol) AND (storeHint:escaped(internal) OR (*:* AND -storeHint:[* TO *])))"
             + " OR (collection:escaped(xwikiCol) AND storeHint:escaped(xwiki))";
@@ -115,6 +120,9 @@ class SolrConnectorTest
 
     @MockComponent
     private Provider<XWikiContext> contextProvider;
+
+    @MockComponent
+    private Provider<Chunk> chunkProvider;
 
     @Mock
     private XWikiContext xcontext;
@@ -272,6 +280,108 @@ class SolrConnectorTest
         SolrQuery query = capturedQuery();
         assertTrue(Arrays.stream(query.getFilterQueries()).noneMatch(fq -> fq.startsWith("language:")),
             Arrays.toString(query.getFilterQueries()));
+    }
+
+    @Test
+    void similaritySearchWithoutLocaleKeepsTheVersionOfEachPageForTheRequestLocale() throws Exception
+    {
+        when(this.embeddingsUtils.computeEmbeddings(anyString(), any(), any(), any()))
+            .thenReturn(new double[] { 0.1, 0.2 });
+        when(this.xcontext.getLocale()).thenReturn(Locale.GERMAN);
+        mockEscaping("de");
+        when(this.queryResponse.getResults()).thenReturn(new SolrDocumentList());
+
+        this.solrConnector.similaritySearch("query", Map.of("col1", MODEL), 5);
+
+        // A filter query, so a pre-filter of the KNN query; chunks indexed without translation fields stay searchable.
+        SolrQuery query = capturedQuery();
+        assertTrue(Arrays.asList(query.getFilterQueries()).contains(GERMAN_VERSION_FILTER),
+            Arrays.toString(query.getFilterQueries()));
+    }
+
+    @Test
+    void keywordSearchWithoutLocaleLooksTheVersionUpFromTheMostSpecificLocale() throws Exception
+    {
+        when(this.xcontext.getLocale()).thenReturn(Locale.forLanguageTag("de-AT"));
+        mockEscaping("de_AT", "de");
+        when(this.queryResponse.getResults()).thenReturn(new SolrDocumentList());
+
+        this.solrConnector.keywordSearch("query", List.of("col1"), 5);
+
+        // The de_AT translation, otherwise the de translation of a page without de_AT translation, otherwise the
+        // default version of a page with neither.
+        SolrQuery query = capturedQuery();
+        assertTrue(Arrays.asList(query.getFilterQueries()).contains("(isTranslation:true AND language:escaped(de_AT))"
+            + " OR (isTranslation:true AND language:escaped(de) AND -translations:(escaped(de_AT)))"
+            + " OR (isTranslation:false AND -translations:(escaped(de_AT) OR escaped(de)))"
+            + " OR (*:* AND -isTranslation:[* TO *])"), Arrays.toString(query.getFilterQueries()));
+    }
+
+    @Test
+    void searchWithoutRequestLocaleKeepsAllVersions() throws Exception
+    {
+        when(this.queryResponse.getResults()).thenReturn(new SolrDocumentList());
+
+        this.solrConnector.keywordSearch("query", List.of("col1"), 5);
+
+        SolrQuery query = capturedQuery();
+        assertTrue(Arrays.stream(query.getFilterQueries()).noneMatch(fq -> fq.contains("isTranslation")),
+            Arrays.toString(query.getFilterQueries()));
+    }
+
+    @Test
+    void searchWithALocaleRestrictsTheLanguageInsteadOfTheVersion() throws Exception
+    {
+        when(this.xcontext.getLocale()).thenReturn(Locale.GERMAN);
+        when(this.solrUtils.toCompleteFilterQueryString("fr")).thenReturn("escaped(fr)");
+        when(this.queryResponse.getResults()).thenReturn(new SolrDocumentList());
+
+        this.solrConnector.keywordSearch("query", List.of("col1"), 5, Locale.FRENCH);
+
+        SolrQuery query = capturedQuery();
+        assertTrue(Arrays.asList(query.getFilterQueries()).contains("language:escaped(fr)"),
+            Arrays.toString(query.getFilterQueries()));
+        assertTrue(Arrays.stream(query.getFilterQueries()).noneMatch(fq -> fq.contains("isTranslation")),
+            Arrays.toString(query.getFilterQueries()));
+    }
+
+    @Test
+    void storeChunksWritesTheTranslationFieldsOfEachChunk() throws Exception
+    {
+        Chunk chunk = new Chunk();
+        chunk.initialize("wiki:Space.Page;de", "col1", "url", "de", 0, 4, "text");
+        chunk.setWiki("mywiki");
+        chunk.setTranslation(true);
+        chunk.setTranslationLocales(List.of("de", "fr"));
+
+        this.solrConnector.storeChunks(List.of(chunk));
+
+        ArgumentCaptor<java.util.Collection<SolrInputDocument>> captor = ArgumentCaptor.captor();
+        verify(this.client).add(captor.capture(), eq(10000));
+        SolrInputDocument document = captor.getValue().iterator().next();
+        assertEquals(true, document.getFieldValue("isTranslation"));
+        assertEquals(List.of("de", "fr"), List.copyOf(document.getFieldValues("translations")));
+    }
+
+    @Test
+    void getChunksReadsTheTranslationFieldsBack() throws Exception
+    {
+        SolrDocument document = new SolrDocument();
+        document.setField("docId", "wiki:Space.Page;");
+        document.setField("index", 0);
+        document.setField("posFirstChar", 0);
+        document.setField("posLastChar", 4);
+        document.setField("isTranslation", true);
+        document.setField("translations", List.of("de", "fr"));
+        SolrDocumentList documents = new SolrDocumentList();
+        documents.add(document);
+        when(this.queryResponse.getResults()).thenReturn(documents);
+        when(this.chunkProvider.get()).thenAnswer(invocation -> new Chunk());
+
+        List<Chunk> chunks = this.solrConnector.getChunks("mywiki", "col1", "wiki:Space.Page;", 0, 1);
+
+        assertTrue(chunks.get(0).isTranslation());
+        assertEquals(List.of("de", "fr"), chunks.get(0).getTranslationLocales());
     }
 
     @Test
