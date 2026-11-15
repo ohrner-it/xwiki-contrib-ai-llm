@@ -36,6 +36,7 @@ import org.xwiki.contrib.llm.Document;
 import org.xwiki.contrib.llm.DocumentStore;
 import org.xwiki.contrib.llm.SolrConnector;
 import org.xwiki.contrib.llm.internal.AiLLMSolrCoreInitializer;
+import org.xwiki.contrib.llm.internal.CollectionAccessChecker;
 import org.xwiki.contrib.llm.internal.CurrentUserCollection;
 import org.xwiki.contrib.llm.internal.CurrentUserCollectionManager;
 import org.xwiki.contrib.llm.internal.DefaultCollection;
@@ -95,7 +96,8 @@ import static org.mockito.Mockito.when;
     InternalDocumentStore.class,
     WriteAttribution.class,
     XWikiDocumentStore.class,
-    XWikiDocumentStoreHelper.class
+    XWikiDocumentStoreHelper.class,
+    CollectionAccessChecker.class
 })
 @ReferenceComponentList
 class DefaultDocumentResourceTest

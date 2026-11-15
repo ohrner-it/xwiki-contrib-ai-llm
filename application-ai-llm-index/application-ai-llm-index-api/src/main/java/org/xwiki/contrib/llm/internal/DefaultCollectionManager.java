@@ -52,9 +52,6 @@ import org.xwiki.query.Query;
 import org.xwiki.query.QueryException;
 import org.xwiki.query.QueryManager;
 import org.xwiki.rendering.syntax.Syntax;
-import org.xwiki.user.group.GroupException;
-import org.xwiki.user.group.GroupManager;
-import org.xwiki.user.group.WikiTarget;
 
 import com.xpn.xwiki.XWikiContext;
 import com.xpn.xwiki.XWikiException;
@@ -91,7 +88,7 @@ public class DefaultCollectionManager implements CollectionManager
     private Logger logger;
 
     @Inject
-    private GroupManager groupManager;
+    private CollectionAccessChecker accessChecker;
 
     @Inject
     private DocumentReferenceResolver<String> documentReferenceResolver;
@@ -368,40 +365,7 @@ public class DefaultCollectionManager implements CollectionManager
     @Override
     public boolean hasAccess(Collection collection)
     {
-        if (collection.getAllowGuests()) {
-            return true;
-        }
-        java.util.Collection<DocumentReference> userGroups = fetchCrtUserGroups();
-        if (userGroups.isEmpty()) {
-            return false;
-        }
-    
-        java.util.Collection<DocumentReference> allowedGroupReferences = 
-                convertAllowedGroupsToReferences(collection.getQueryGroups());
-    
-        return allowedGroupReferences.stream().anyMatch(userGroups::contains);
-    }
-    
-
-    private java.util.Collection<DocumentReference> fetchCrtUserGroups()
-    {
-        DocumentReference documentUserReference = contextProvider.get().getUserReference();
-        java.util.Collection<DocumentReference> userGroups = new ArrayList<>();
-        try {
-            userGroups = groupManager.getGroups(documentUserReference, WikiTarget.ENTITY_AND_CURRENT, true);
-        } catch (GroupException e) {
-            this.logger.warn("Failed to get groups for user [{}]: [{}]", documentUserReference,
-                ExceptionUtils.getRootCauseMessage(e));
-        }
-        return userGroups;
-    }
-    
-    private java.util.Collection<DocumentReference> convertAllowedGroupsToReferences(String stringGroups)
-    {
-        return Stream.of(StringUtils.split(stringGroups, ','))
-            .map(String::trim)
-            .map(this.documentReferenceResolver::resolve)
-            .collect(Collectors.toList());
+        return this.accessChecker.hasAccess(collection);
     }
 
     @Override
