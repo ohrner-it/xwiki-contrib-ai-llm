@@ -63,8 +63,8 @@ import com.xpn.xwiki.objects.classes.PropertyClass;
  * <p>The indexed text is the rendered title, the content, the objects and the attachments of the page. For the
  * objects, only what is both content and safe to disclose to every reader of the page is indexed:</p>
  * <ul>
- * <li>objects of the classes {@code XWiki.XWikiRights}, {@code XWiki.XWikiGlobalRights} and
- * {@code XWiki.XWikiPreferences} are never indexed, they hold rights and configuration, not content;</li>
+ * <li>objects of technical classes ({@link #EXCLUDED_CLASSES}) are never indexed, as pages that are not hidden carry
+ * them too, e.g. a style sheet extension or the live table configuration of an application's home page;</li>
  * <li>an object whose class cannot be loaded is never indexed, as its property types are unknown;</li>
  * <li>only properties that the class defines are indexed, a value stored on the object without a matching class
  * property is skipped;</li>
@@ -85,11 +85,45 @@ import com.xpn.xwiki.objects.classes.PropertyClass;
 public class XWikiDocumentDocument implements Document
 {
     /**
-     * The classes whose objects are never indexed, as local (wiki-less) references: they hold rights and
-     * configuration, not content.
+     * The classes whose objects are never indexed, as local (wiki-less) references: they hold code, configuration,
+     * rights, account and user data or data computed by the platform rather than content; the comments below group
+     * them.
      */
-    private static final Set<String> EXCLUDED_CLASSES =
-        Set.of("XWiki.XWikiRights", "XWiki.XWikiGlobalRights", "XWiki.XWikiPreferences");
+    private static final Set<String> EXCLUDED_CLASSES = Set.of(
+        // Rights and configuration.
+        "XWiki.XWikiRights", "XWiki.XWikiGlobalRights", "XWiki.XWikiPreferences", "XWiki.ConfigurableClass",
+        // Code.
+        "XWiki.JavaScriptExtension", "XWiki.StyleSheetExtension", "XWiki.UIExtensionClass", "XWiki.WikiMacroClass",
+        "XWiki.WikiMacroParameterClass", "XWiki.ComponentClass", "XWiki.ComponentDependencyClass",
+        "XWiki.ComponentInterfaceClass", "XWiki.ComponentMethodClass", "XWiki.SchedulerJobClass", "Panels.PanelClass",
+        "XWiki.GadgetClass", "XWiki.XWikiSkins", "XWiki.XWikiSkinFileOverrideClass", "XWiki.PDFExport.TemplateClass",
+        "XWiki.EventStream.Code.EventClass", "XWiki.Notifications.Code.NotificationDisplayerClass",
+        "XWiki.Notifications.Code.NotificationEmailRendererClass",
+        "XWiki.Notifications.Code.NotificationFilterDisplayerClass",
+        // How a page is displayed, edited, created or redirected.
+        "XWiki.ClassSheetBinding", "XWiki.DocumentSheetBinding", "XWiki.SheetClass", "XWiki.SheetDescriptorClass",
+        "XWiki.EditModeClass", "XWiki.EditorBindingClass", "XWiki.EditorClass", "XWiki.TemplateProviderClass",
+        "XWiki.RequiredRightClass", "XWiki.RedirectClass", "XWiki.GlobalRedirect", "Attachment.Code.RedirectClass",
+        "XWiki.DocumentAsyncClass",
+        "XWiki.PinnedChildPagesClass", "XWiki.TranslationDocumentClass", "AppWithinMinutes.LiveTableClass",
+        "AppWithinMinutes.MetadataClass",
+        // Data computed by the platform.
+        "XWiki.AverageRatingsClass",
+        // Keys, group memberships, invitations and user settings.
+        "Crypto.PrivateKeyClass", "Crypto.CertificateClass", "Crypto.SignatureClass", "XWiki.XWikiGroups",
+        "Invitation.InvitationMailClass", "XWiki.ResetPasswordRequestClass", "Dashboard.UserDashboardPreferencesClass",
+        "XWiki.Notifications.Code.AutomaticWatchModeClass",
+        "XWiki.Notifications.Code.NotificationPreferenceClass",
+        "XWiki.Notifications.Code.NotificationEmailPreferenceClass",
+        "XWiki.Notifications.Code.NotificationEmailGroupingStrategyPreferenceClass",
+        "XWiki.Notifications.Code.NotificationEventGroupingStrategyPreferenceClass",
+        "XWiki.Notifications.Code.ToggleableFilterPreferenceClass",
+        // The configuration of this application.
+        "AI.Code.AIConfigClass", "AI.Code.ChatOriginConfigClass", "AI.Code.ChatWidgetConfigClass",
+        "AI.Code.JWTTokenAuthenticatorUserClass", "AI.Code.RAGChatRequestFilterClass",
+        "AI.Collections.Code.CollectionsClass", "AI.Collections.Code.ExternalAuthorizationConfigurationClass",
+        "AI.MCP.Code.MCPServerConfigClass", "AI.Models.Code.ModelsClass", "AI.PromptDB.Code.PromptDBClass",
+        "AI.Authorized Applications.Code.Authorized ApplicationsClass");
 
     private static final String PASSWORD_CLASS_TYPE = "Password";
 
