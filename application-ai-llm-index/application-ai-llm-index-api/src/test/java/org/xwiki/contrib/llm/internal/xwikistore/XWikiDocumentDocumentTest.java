@@ -122,22 +122,18 @@ class XWikiDocumentDocumentTest
             XObjects content""";
     }
 
-    private BaseObject mockObject(String className, BaseClass baseClass)
+    private BaseObject mockObject(DocumentReference classReference, BaseClass baseClass)
     {
         BaseObject xObject = mock();
         when(xObject.getDocumentReference()).thenReturn(new DocumentReference("mywiki", "AI", "Doc"));
-        when(xObject.getXClassReference()).thenReturn(new DocumentReference("mywiki", "XWiki", className));
+        when(xObject.getXClassReference()).thenReturn(classReference);
         when(xObject.getXClass(any())).thenReturn(baseClass);
         return xObject;
     }
 
     private BaseObject mockObject(BaseClass baseClass)
     {
-        BaseObject xObject = mock();
-        when(xObject.getDocumentReference()).thenReturn(new DocumentReference("mywiki", "AI", "Doc"));
-        when(xObject.getXClassReference()).thenReturn(new DocumentReference("mywiki", "AI", "XClass"));
-        when(xObject.getXClass(any())).thenReturn(baseClass);
-        return xObject;
+        return mockObject(new DocumentReference("mywiki", "AI", "XClass"), baseClass);
     }
 
     private static BaseClass mockClass(List<PropertyClass> properties)
@@ -391,21 +387,60 @@ class XWikiDocumentDocumentTest
         verify(this.generalMailConfiguration).shouldObfuscate();
     }
 
+    static Stream<DocumentReference> getContentXObjectsSkipsExcludedClasses()
+    {
+        return Stream.of(new DocumentReference("mywiki", "XWiki", "XWikiRights"),
+            new DocumentReference("mywiki", "XWiki", "XWikiGlobalRights"),
+            new DocumentReference("mywiki", "XWiki", "XWikiPreferences"),
+            new DocumentReference("mywiki", "XWiki", "StyleSheetExtension"),
+            new DocumentReference("mywiki", "XWiki", "UIExtensionClass"),
+            new DocumentReference("mywiki", "XWiki", "DocumentSheetBinding"),
+            new DocumentReference("mywiki", "AppWithinMinutes", "LiveTableClass"),
+            new DocumentReference("mywiki", "XWiki", "XWikiGroups"),
+            new DocumentReference("mywiki", "Crypto", "PrivateKeyClass"),
+            new DocumentReference("mywiki", List.of("XWiki", "Notifications", "Code"), "AutomaticWatchModeClass"),
+            new DocumentReference("mywiki", List.of("AI", "Models", "Code"), "ModelsClass"),
+            new DocumentReference("mywiki", List.of("AI", "Authorized Applications", "Code"),
+                "Authorized ApplicationsClass"));
+    }
+
     @ParameterizedTest
-    @ValueSource(strings = { "XWikiRights", "XWikiGlobalRights", "XWikiPreferences" })
-    void getContentXObjectsSkipsExcludedClasses(String className)
+    @MethodSource
+    void getContentXObjectsSkipsExcludedClasses(DocumentReference classReference)
     {
         String prefix = setUpContentWithObjects();
 
         List<PropertyClass> properties = new ArrayList<>();
         BaseClass baseClass = mockClass(properties);
-        BaseObject xObject = mockObject(className, baseClass);
+        BaseObject xObject = mockObject(classReference, baseClass);
         properties.add(mockProperty(xObject, "users"));
         setObjects(xObject);
 
         assertEquals(prefix, this.xWikiDocumentDocument.getContent());
         verify(xObject, never()).getXClass(any());
         verify(xObject, never()).getStringValue(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "XWikiComments", "TagClass", "XWikiUsers" })
+    void getContentXObjectsIndexesContentClassesOfThePlatform(String className)
+    {
+        String prefix = setUpContentWithObjects();
+
+        List<PropertyClass> properties = new ArrayList<>();
+        BaseClass baseClass = mockClass(properties);
+        BaseObject xObject = mockObject(new DocumentReference("mywiki", "XWiki", className), baseClass);
+        properties.add(mockProperty(xObject, "comment"));
+        setObjects(xObject);
+
+        assertEquals(prefix + """
+
+
+            = Metadata of Type XWiki.%s =
+
+            == Property comment ==
+
+            commentValue""".formatted(className), this.xWikiDocumentDocument.getContent());
     }
 
     @Test
