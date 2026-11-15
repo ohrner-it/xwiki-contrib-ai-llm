@@ -45,6 +45,7 @@ import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.llm.internal.AiLLMSolrCoreInitializer;
 import org.xwiki.contrib.llm.internal.InternalDocumentStore;
+import org.xwiki.contrib.llm.internal.KeywordQuery;
 import org.xwiki.contrib.llm.openai.Context;
 import org.xwiki.search.solr.Solr;
 import org.xwiki.search.solr.SolrException;
@@ -641,7 +642,8 @@ public class SolrConnector
      * by document store: every chunk of the given collections can be returned, whatever the document store it has
      * been indexed from.
      *
-     * @param textQuery the query to search for
+     * @param textQuery the text to search for, e.g. a question: its stop words are left out, those of the context
+     *     locale and those of English
      * @param collections the collections to search in
      * @param limit the maximum number of results to return
      * @return a list of context chunks
@@ -656,7 +658,8 @@ public class SolrConnector
      * chunks stored in a given content language. The search is not restricted by document store: every chunk of the
      * given collections can be returned, whatever the document store it has been indexed from.
      *
-     * @param textQuery the query to search for
+     * @param textQuery the text to search for, e.g. a question: its stop words are left out, those of the given locale
+     *     (or else of the context locale) and those of English
      * @param collections the collections to search in
      * @param limit the maximum number of results to return
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
@@ -676,7 +679,8 @@ public class SolrConnector
      * keys of {@code collectionStoreHintMap}. A collection with a blank hint is not searched: the absence of a hint
      * never means "any document store". Nothing is searched when no collection has a hint.
      *
-     * @param textQuery the query to search for
+     * @param textQuery the text to search for, e.g. a question: its stop words are left out, those of the given locale
+     *     (or else of the context locale) and those of English
      * @param collectionStoreHintMap a map of the collections to search in and the hint of the document store their
      *     chunks must have been indexed from
      * @param limit the maximum number of results to return
@@ -708,11 +712,17 @@ public class SolrConnector
 
         if (limit > 0 && !nothingToSearch) {
             try {
+                // The language of the question is unknown: without a search locale, the context locale is the best
+                // guess.
+                String keywordQuery = KeywordQuery.toQuery(textQuery,
+                    locale != null ? locale : this.contextProvider.get().getLocale());
+                if (keywordQuery.isEmpty()) {
+                    return resultsList;
+                }
                 SolrClient client =
                     this.solr.getCore(AiLLMSolrCoreInitializer.DEFAULT_AILLM_SOLR_CORE).getClient();
                 SolrQuery query = new SolrQuery();
-                query.setQuery("%s:%s".formatted(AiLLMSolrCoreInitializer.FIELD_CONTENT_INDEX,
-                    this.solrUtils.toCompleteFilterQueryString(textQuery)));
+                setKeywordQuery(keywordQuery, query);
                 query.setRows(limit);
                 setContextQueryFields(query);
                 // Collection names in the filter query are not wiki-qualified, so without the wiki filter a
@@ -730,6 +740,21 @@ public class SolrConnector
             }
         }
         return resultsList;
+    }
+
+    /**
+     * Searches the terms in the indexed content with the extended DisMax parser: a chunk matches when it contains any
+     * of the terms, and scores higher the more of them it contains, and when two of them are close to each other. The
+     * terms cannot address other fields.
+     */
+    private static void setKeywordQuery(String keywordQuery, SolrQuery query)
+    {
+        query.setQuery(keywordQuery);
+        query.set("defType", "edismax");
+        query.set("qf", AiLLMSolrCoreInitializer.FIELD_CONTENT_INDEX);
+        query.set("pf2", AiLLMSolrCoreInitializer.FIELD_CONTENT_INDEX);
+        query.set("ps2", 2);
+        query.set("uf", "-*");
     }
 
     private static Map<String, String> getNonBlankStoreHints(Map<String, String> collectionStoreHintMap)
