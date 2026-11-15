@@ -1,5 +1,10 @@
 # LLM AI Application
 
+> [!WARNING]
+> This branch contains a prototypical, AI-generated implementation that has not been reviewed by a human yet. It
+> is currently being tested. This note will be removed once the changes have proven to work in practice and have
+> been reviewed.
+
 The LLM project aims to integrate artificial intelligence in the form of Large Language Models (LLMs)
 into the XWiki platform.
 You can find more details about the general plan in the
