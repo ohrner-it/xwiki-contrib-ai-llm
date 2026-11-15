@@ -148,7 +148,7 @@ class AiLLMSolrCoreInitializerTest
         verify(this.client, never()).query(any());
 
         // The stored core version is bumped to the current one.
-        assertEquals("121000007", getStoredCoreVersion(false));
+        assertEquals("121000008", getStoredCoreVersion(false));
     }
 
     @Test
@@ -165,7 +165,22 @@ class AiLLMSolrCoreInitializerTest
         order.verify(this.client).query(any());
         // The content_index field is set, the keyword index step is run and the version is bumped.
         verify(this.solrSchemaUtils).setField(eq(this.core), eq("content_index"), eq("text_general"), eq(false));
-        assertEquals("121000007", getStoredCoreVersion(false));
+        assertEquals("121000008", getStoredCoreVersion(false));
+    }
+
+    @Test
+    void migrationFromTheXWikiStoreCleanupVersionAddsTheTranslationFieldsWithoutTouchingTheData() throws Exception
+    {
+        setStoredVersions(121000007L);
+
+        this.initializer.initialize(this.core);
+
+        verify(this.solrSchemaUtils).setField(eq(this.core), eq("isTranslation"), eq("boolean"), eq(false));
+        verify(this.solrSchemaUtils).setField(eq(this.core), eq("translations"), eq("strings"), eq(false));
+        verify(this.client, never()).deleteByQuery(anyString());
+        verify(this.marker, never()).set();
+        verify(this.client, never()).query(any());
+        assertEquals("121000008", getStoredCoreVersion(false));
     }
 
     @Test
@@ -178,7 +193,7 @@ class AiLLMSolrCoreInitializerTest
         verify(this.client, never()).deleteByQuery(anyString());
         verify(this.marker, never()).set();
         verify(this.client, never()).query(any());
-        assertEquals("121000007", getStoredCoreVersion(true));
+        assertEquals("121000008", getStoredCoreVersion(true));
     }
 
     @Test
@@ -200,7 +215,7 @@ class AiLLMSolrCoreInitializerTest
     @Test
     void currentVersionIsNotMigrated() throws Exception
     {
-        setStoredVersions(121000007L);
+        setStoredVersions(121000008L);
 
         this.initializer.initialize(this.core);
 

@@ -109,6 +109,9 @@ public class XWikiDocumentDocument implements Document
     private Provider<XWikiContext> xWikiContextProvider;
 
     @Inject
+    private XWikiDocumentStoreHelper storeHelper;
+
+    @Inject
     @Named("withparameters")
     private EntityReferenceSerializer<String> parametersEntityReferenceSerializer;
 
@@ -164,6 +167,18 @@ public class XWikiDocumentDocument implements Document
     public String getTitle()
     {
         return this.xWikiDocument.getRenderedTitle(Syntax.PLAIN_1_0, this.xWikiContextProvider.get());
+    }
+
+    @Override
+    public boolean isTranslation()
+    {
+        return XWikiDocumentStoreHelper.isTranslation(this.xWikiDocument);
+    }
+
+    @Override
+    public List<Locale> getTranslationLocales() throws IndexException
+    {
+        return this.storeHelper.getVisibleTranslationLocales(this.xWikiDocument);
     }
 
     @Override

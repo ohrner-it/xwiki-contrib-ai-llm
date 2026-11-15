@@ -41,10 +41,14 @@ import org.xwiki.test.junit5.mockito.ComponentTest;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 import org.xwiki.test.junit5.mockito.MockComponent;
 
+import com.xpn.xwiki.XWiki;
 import com.xpn.xwiki.XWikiContext;
+import com.xpn.xwiki.XWikiException;
+import com.xpn.xwiki.doc.XWikiDocument;
 import com.xpn.xwiki.test.reference.ReferenceComponentList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -65,6 +69,8 @@ import static org.mockito.Mockito.when;
 class XWikiDocumentStoreHelperTest
 {
     private static final WikiReference WIKI = new WikiReference("mywiki");
+
+    private static final DocumentReference PAGE = new DocumentReference("mywiki", "Space", "Page");
 
     private static final List<SpaceReference> SPACES = List.of(new SpaceReference("mywiki", "Space"));
 
@@ -91,6 +97,9 @@ class XWikiDocumentStoreHelperTest
 
     @MockComponent
     private XWikiContext context;
+
+    @Mock
+    private XWiki xwiki;
 
     @Mock
     private Query query;
@@ -234,5 +243,74 @@ class XWikiDocumentStoreHelperTest
 
         assertTrue(exception.getMessage().contains(EXPECTED_STATEMENT));
         verify(this.query, never()).setLimit(-1);
+    }
+
+    @Test
+    void isTranslationTellsTranslationsFromDefaultVersions()
+    {
+        assertTrue(XWikiDocumentStoreHelper.isTranslation(new XWikiDocument(PAGE, Locale.GERMAN)));
+        assertFalse(XWikiDocumentStoreHelper.isTranslation(new XWikiDocument(PAGE, Locale.ROOT)));
+    }
+
+    @Test
+    void visibleTranslationLocalesOfTheDefaultVersion() throws Exception
+    {
+        XWikiDocument defaultVersion = mockVersion(Locale.ROOT, List.of(Locale.GERMAN, Locale.FRENCH));
+        mockTranslation(Locale.GERMAN, false);
+        mockTranslation(Locale.FRENCH, false);
+
+        assertEquals(List.of(Locale.GERMAN, Locale.FRENCH), this.helper.getVisibleTranslationLocales(defaultVersion));
+    }
+
+    @Test
+    void visibleTranslationLocalesOfATranslationAreThoseOfItsDefaultVersion() throws Exception
+    {
+        XWikiDocument defaultVersion = mockVersion(Locale.ROOT, List.of(Locale.GERMAN, Locale.FRENCH));
+        when(this.xwiki.getDocument(PAGE, this.context)).thenReturn(defaultVersion);
+        XWikiDocument translation = mockVersion(Locale.GERMAN, List.of());
+        mockTranslation(Locale.GERMAN, false);
+        mockTranslation(Locale.FRENCH, false);
+
+        assertEquals(List.of(Locale.GERMAN, Locale.FRENCH), this.helper.getVisibleTranslationLocales(translation));
+    }
+
+    @Test
+    void hiddenTranslationsAreLeftOut() throws Exception
+    {
+        XWikiDocument defaultVersion = mockVersion(Locale.ROOT, List.of(Locale.GERMAN, Locale.FRENCH));
+        mockTranslation(Locale.GERMAN, true);
+        mockTranslation(Locale.FRENCH, false);
+
+        // The hidden German translation is not indexed: the default version stands in for it.
+        assertEquals(List.of(Locale.FRENCH), this.helper.getVisibleTranslationLocales(defaultVersion));
+    }
+
+    @Test
+    void failureToReadTheTranslationsIsReported() throws Exception
+    {
+        XWikiDocument defaultVersion = mockVersion(Locale.ROOT, List.of());
+        when(defaultVersion.getTranslationLocales(this.context)).thenThrow(new XWikiException());
+
+        IndexException exception =
+            assertThrows(IndexException.class, () -> this.helper.getVisibleTranslationLocales(defaultVersion));
+
+        assertEquals("Failed to get the translations of [mywiki:Space.Page]", exception.getMessage());
+    }
+
+    private XWikiDocument mockVersion(Locale locale, List<Locale> translations) throws Exception
+    {
+        when(this.context.getWiki()).thenReturn(this.xwiki);
+        XWikiDocument version = mock();
+        when(version.getDocumentReference()).thenReturn(PAGE);
+        when(version.getLocale()).thenReturn(locale);
+        when(version.getTranslationLocales(this.context)).thenReturn(translations);
+        return version;
+    }
+
+    private void mockTranslation(Locale locale, boolean hidden) throws Exception
+    {
+        XWikiDocument translation = mock();
+        when(translation.isHidden()).thenReturn(hidden);
+        when(this.xwiki.getDocument(new DocumentReference(PAGE, locale), this.context)).thenReturn(translation);
     }
 }

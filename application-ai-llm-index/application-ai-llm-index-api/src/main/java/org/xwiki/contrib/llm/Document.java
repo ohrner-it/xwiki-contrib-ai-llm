@@ -20,9 +20,11 @@
 package org.xwiki.contrib.llm;
 
 import java.util.List;
+import java.util.Locale;
 
 import org.xwiki.component.annotation.Role;
 import org.xwiki.model.reference.LocalDocumentReference;
+import org.xwiki.stability.Unstable;
 
 import com.xpn.xwiki.doc.XWikiDocument;
 
@@ -79,6 +81,36 @@ public interface Document
      * @return the document's language
      */
     String getLanguage();
+
+    /**
+     * Tells whether this document is a translation of another document of the store, rather than its default
+     * version. Together with {@link #getTranslationLocales()}, it lets a search return, of a document that exists in
+     * several languages, only the version for the locale of the request, see
+     * {@link CollectionManager#hybridSearch(String, List, HybridSearchParameters)}.
+     *
+     * @return {@code true} for a translation, {@code false} for the default version or a document without
+     *     translations
+     * @since 1.0.2
+     */
+    @Unstable
+    default boolean isTranslation()
+    {
+        return false;
+    }
+
+    /**
+     * Retrieves the locales of the translations of the document this is a language version of; all its versions
+     * have the same translation locales.
+     *
+     * @return the locales of the translations, empty when the document has none
+     * @throws IndexException if the translations cannot be determined
+     * @since 1.0.2
+     */
+    @Unstable
+    default List<Locale> getTranslationLocales() throws IndexException
+    {
+        return List.of();
+    }
 
     /**
      * Retrieves the URL of the document.

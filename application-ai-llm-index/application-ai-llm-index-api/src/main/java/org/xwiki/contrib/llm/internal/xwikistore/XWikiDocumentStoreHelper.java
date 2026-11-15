@@ -52,6 +52,8 @@ import org.xwiki.query.QueryFilter;
 import org.xwiki.query.QueryManager;
 
 import com.xpn.xwiki.XWikiContext;
+import com.xpn.xwiki.XWikiException;
+import com.xpn.xwiki.doc.XWikiDocument;
 
 /**
  * Helper class for the {@link XWikiDocumentStore}.
@@ -137,6 +139,43 @@ public class XWikiDocumentStoreHelper
                 collectionWiki.equals(spaceReference.getWikiReference()));
         }
         return spaceReferenceStream.toList();
+    }
+
+    /**
+     * @param document a version of a wiki page
+     * @return whether the version is a translation rather than the default version of the page
+     */
+    public static boolean isTranslation(XWikiDocument document)
+    {
+        Locale locale = document.getLocale();
+        return locale != null && !Locale.ROOT.equals(locale);
+    }
+
+    /**
+     * @param document a version of a wiki page
+     * @return the locales of the translations of the page that are not hidden: a hidden translation is not indexed,
+     *     so the default version stands in for it
+     * @throws IndexException if the translations cannot be loaded
+     */
+    public List<Locale> getVisibleTranslationLocales(XWikiDocument document) throws IndexException
+    {
+        XWikiContext context = this.contextProvider.get();
+        DocumentReference reference = document.getDocumentReference();
+        try {
+            XWikiDocument defaultDocument =
+                isTranslation(document) ? context.getWiki().getDocument(reference, context) : document;
+            List<Locale> result = new ArrayList<>();
+            for (Locale locale : defaultDocument.getTranslationLocales(context)) {
+                XWikiDocument translation =
+                    context.getWiki().getDocument(new DocumentReference(reference, locale), context);
+                if (!Boolean.TRUE.equals(translation.isHidden())) {
+                    result.add(locale);
+                }
+            }
+            return result;
+        } catch (XWikiException e) {
+            throw new IndexException("Failed to get the translations of [%s]".formatted(reference), e);
+        }
     }
 
     /**

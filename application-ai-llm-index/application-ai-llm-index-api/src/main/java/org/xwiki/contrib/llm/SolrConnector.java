@@ -32,6 +32,7 @@ import javax.inject.Inject;
 import javax.inject.Provider;
 import javax.inject.Singleton;
 
+import org.apache.commons.lang3.LocaleUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
@@ -148,6 +149,9 @@ public class SolrConnector
         solrDocument.addField(AiLLMSolrCoreInitializer.FIELD_COLLECTION, chunk.getCollection());
         solrDocument.addField(AiLLMSolrCoreInitializer.FIELD_DOC_URL, chunk.getDocumentURL());
         solrDocument.addField(AiLLMSolrCoreInitializer.FIELD_LANGUAGE, chunk.getLanguage());
+        solrDocument.addField(AiLLMSolrCoreInitializer.FIELD_IS_TRANSLATION, chunk.isTranslation());
+        chunk.getTranslationLocales()
+            .forEach(locale -> solrDocument.addField(AiLLMSolrCoreInitializer.FIELD_TRANSLATIONS, locale));
         solrDocument.addField(AiLLMSolrCoreInitializer.FIELD_INDEX, chunk.getChunkIndex());
         solrDocument.addField(AiLLMSolrCoreInitializer.FIELD_POS_FIRST_CHAR, chunk.getPosFirstChar());
         solrDocument.addField(AiLLMSolrCoreInitializer.FIELD_POS_LAST_CHAR, chunk.getPosLastChar());
@@ -327,6 +331,13 @@ public class SolrConnector
         result.setChunkIndex((Integer) solrDocument.getFieldValue(AiLLMSolrCoreInitializer.FIELD_INDEX));
         result.setErrorMessage((String) solrDocument.getFieldValue(AiLLMSolrCoreInitializer.FIELD_ERROR_MESSAGE));
         result.setStoreHint((String) solrDocument.getFieldValue(AiLLMSolrCoreInitializer.FIELD_STORE_HINT));
+        result.setTranslation(
+            Boolean.TRUE.equals(solrDocument.getFieldValue(AiLLMSolrCoreInitializer.FIELD_IS_TRANSLATION)));
+        java.util.Collection<Object> translationLocales =
+            solrDocument.getFieldValues(AiLLMSolrCoreInitializer.FIELD_TRANSLATIONS);
+        if (translationLocales != null) {
+            result.setTranslationLocales(translationLocales.stream().map(String::valueOf).toList());
+        }
         result.setId((String) solrDocument.getFieldValue(FIELD_ID));
         List<?> vectorField = (List<?>) solrDocument.getFieldValue(AiLLMSolrCoreInitializer.FIELD_VECTOR);
         if (vectorField != null) {
@@ -560,7 +571,8 @@ public class SolrConnector
      * @param collectionEmbeddingModelMap a map of collections and their corresponding embedding models
      * @param limit the maximum number of results to return
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
-     *     language field), or {@code null} to search all languages
+     *     language field), or {@code null} for the language version of each document for the locale of the
+     *     request, see {@link CollectionManager#hybridSearch(String, List, HybridSearchParameters)}
      * @return a list of document details
      * @since 0.10
      */
@@ -584,7 +596,8 @@ public class SolrConnector
      *     been indexed from
      * @param limit the maximum number of results to return
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
-     *     language field), or {@code null} to search all languages
+     *     language field), or {@code null} for the language version of each document for the locale of the
+     *     request, see {@link CollectionManager#hybridSearch(String, List, HybridSearchParameters)}
      * @return a list of document details
      * @since 0.11
      */
@@ -677,7 +690,8 @@ public class SolrConnector
      * @param collections the collections to search in
      * @param limit the maximum number of results to return
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
-     *     language field), or {@code null} to search all languages
+     *     language field), or {@code null} for the language version of each document for the locale of the
+     *     request, see {@link CollectionManager#hybridSearch(String, List, HybridSearchParameters)}
      * @return a list of context chunks
      * @since 0.10
      */
@@ -698,7 +712,8 @@ public class SolrConnector
      *     chunks must have been indexed from
      * @param limit the maximum number of results to return
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
-     *     language field), or {@code null} to search all languages
+     *     language field), or {@code null} for the language version of each document for the locale of the
+     *     request, see {@link CollectionManager#hybridSearch(String, List, HybridSearchParameters)}
      * @return a list of context chunks
      * @since 0.11
      */
@@ -778,12 +793,53 @@ public class SolrConnector
         return query;
     }
 
+    /**
+     * Restrict the search to the chunks of the given content language, or else to the language version of each
+     * document for the locale of the current request: the translation in that locale, otherwise in a more general
+     * locale of it (e.g. {@code de} for {@code de_AT}), otherwise the default version, like
+     * {@code XWikiDocument#getTranslatedDocument}. Chunks indexed before the translation fields existed have none and
+     * match every locale.
+     */
     private void addLanguageQuery(Locale locale, SolrQuery query)
     {
+        Locale requestLocale = this.contextProvider.get().getLocale();
         if (locale != null) {
             query.addFilterQuery(AiLLMSolrCoreInitializer.FIELD_LANGUAGE + SOLR_SEPARATOR
                 + this.solrUtils.toCompleteFilterQueryString(locale.toString()));
+        } else if (requestLocale != null) {
+            query.addFilterQuery(buildVersionQuery(LocaleUtils.localeLookupList(requestLocale).stream()
+                .map(lookupLocale -> this.solrUtils.toCompleteFilterQueryString(lookupLocale.toString()))
+                .toList()));
         }
+    }
+
+    /**
+     * @param locales the escaped locales to look a translation up for, most specific first
+     * @return the filter query that keeps, of each document, its version for the first of the locales it has a
+     *     translation for, or else its default version
+     */
+    private static String buildVersionQuery(List<String> locales)
+    {
+        List<String> clauses = new ArrayList<>();
+        for (int i = 0; i < locales.size(); i++) {
+            String clause = "%s:true AND %s:%s".formatted(AiLLMSolrCoreInitializer.FIELD_IS_TRANSLATION,
+                AiLLMSolrCoreInitializer.FIELD_LANGUAGE, locales.get(i));
+            if (i > 0) {
+                clause += " AND -" + translationsQuery(locales.subList(0, i));
+            }
+            clauses.add(clause);
+        }
+        clauses.add("%s:false AND -%s".formatted(AiLLMSolrCoreInitializer.FIELD_IS_TRANSLATION,
+            translationsQuery(locales)));
+        clauses.add("*:* AND -%s:[* TO *]".formatted(AiLLMSolrCoreInitializer.FIELD_IS_TRANSLATION));
+        return clauses.stream().map(clause -> PARENTHESIS_OPEN + clause + PARENTHESIS_CLOSE)
+            .collect(Collectors.joining(OR_DELIMITER));
+    }
+
+    private static String translationsQuery(List<String> locales)
+    {
+        return AiLLMSolrCoreInitializer.FIELD_TRANSLATIONS + SOLR_SEPARATOR + PARENTHESIS_OPEN
+            + String.join(OR_DELIMITER, locales) + PARENTHESIS_CLOSE;
     }
 
     private static void setContextQueryFields(SolrQuery query)

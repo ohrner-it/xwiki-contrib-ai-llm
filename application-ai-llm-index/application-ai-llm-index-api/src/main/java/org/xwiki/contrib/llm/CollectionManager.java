@@ -136,7 +136,8 @@ public interface CollectionManager
      * @param limitSemanticSimilarity the maximum number of results to return from a semantic similarity search
      * @param limitKeywordSearch the maximum number of results to return for the keyword search
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
-     *     language field), or {@code null} to search all languages
+     *     language field), or {@code null} for the version of each document for the locale of the request, see
+     *     {@link CollectionManager#hybridSearch(String, List, HybridSearchParameters)}
      * @return the context chunks matching the query, best first, in the order of the fusion of the two searches and
      *     not in the order of their {@code similarityScore}
      * @since 0.10
@@ -156,6 +157,14 @@ public interface CollectionManager
      *
      * <p>The default implementation supports no minimum semantic score: without one, it delegates to
      * {@link #hybridSearch(String, List, int, int, Locale)}; implementations that support the minimum override it.</p>
+     *
+     * <p>Without a content language, the implementation shipped with this module returns, of each document indexed in
+     * several languages, only the language version for the locale of the current request, as
+     * {@code XWikiDocument#getTranslatedDocument} chooses it: the translation in that locale, otherwise in a more
+     * general locale of it ({@code de} for {@code de_AT}), otherwise the default version (see
+     * {@link Document#isTranslation()} and {@link Document#getTranslationLocales()}). Chunks indexed before this
+     * version of the application are returned in every language until they are indexed again, and so are all versions
+     * when the request has no locale.</p>
      *
      * @param textQuery the text query
      * @param collections the collections to search in

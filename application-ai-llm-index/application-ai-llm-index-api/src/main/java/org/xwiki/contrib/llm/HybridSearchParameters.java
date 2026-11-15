@@ -31,7 +31,8 @@ import org.xwiki.stability.Unstable;
  *     semantic search
  * @param limitKeywordSearch the maximum number of results of the keyword search; 0 or less for no keyword search
  * @param locale the content language the returned chunks must be indexed under (exact match on the stored language
- *     field), or {@code null} to search all languages
+ *     field), or {@code null} for the version of each document for the locale of the request, see
+ *     {@link CollectionManager#hybridSearch(String, java.util.List, HybridSearchParameters)}
  * @param minSemanticScore the minimum similarity score of a result of the semantic search, between 0 and 1 on the
  *     scale {@code (1 + cos) / 2} of the cosine similarity; 0 for no minimum
  * @version $Id$

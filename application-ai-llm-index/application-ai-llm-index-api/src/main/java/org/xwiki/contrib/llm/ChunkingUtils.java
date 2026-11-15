@@ -21,6 +21,7 @@ package org.xwiki.contrib.llm;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalInt;
 import java.util.function.Function;
@@ -101,6 +102,9 @@ public class ChunkingUtils
 
         // get the document content
         String content = document.getContent();
+        // Sorted, so that the chunks compare equal to the stored ones as long as nothing changed.
+        List<String> translationLocales =
+            document.getTranslationLocales().stream().map(Locale::toString).sorted().toList();
 
         // Initialize the chunks map
         List<Chunk> result = new ArrayList<>();
@@ -136,6 +140,7 @@ public class ChunkingUtils
             chunk.setChunkIndex(chunkIndex);
             chunk.setWiki(context.getWikiId());
             chunk.setStoreHint(collection.getDocumentStoreHint());
+            setTranslationFields(chunk, document.isTranslation(), translationLocales);
             chunk.computeId();
             result.add(chunk);
     
@@ -151,6 +156,12 @@ public class ChunkingUtils
         }
     
         return result;
+    }
+
+    private static void setTranslationFields(Chunk chunk, boolean translation, List<String> translationLocales)
+    {
+        chunk.setTranslation(translation);
+        chunk.setTranslationLocales(translationLocales);
     }
 
     private static void validateChunkSizeAndOffset(int maxChunkSize, int offset) throws IndexException

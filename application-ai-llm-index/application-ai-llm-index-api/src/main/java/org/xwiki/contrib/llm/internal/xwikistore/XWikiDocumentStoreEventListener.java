@@ -19,13 +19,18 @@
  */
 package org.xwiki.contrib.llm.internal.xwikistore;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import javax.inject.Inject;
 import javax.inject.Named;
+import javax.inject.Provider;
 import javax.inject.Singleton;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.slf4j.Logger;
 import org.xwiki.bridge.event.DocumentCreatedEvent;
 import org.xwiki.bridge.event.DocumentDeletedEvent;
 import org.xwiki.bridge.event.DocumentUpdatedEvent;
@@ -34,10 +39,13 @@ import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.SolrConnector;
 import org.xwiki.contrib.llm.internal.DefaultCollection;
 import org.xwiki.index.TaskManager;
+import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.EntityReferenceSerializer;
 import org.xwiki.observation.event.AbstractLocalEventListener;
 import org.xwiki.observation.event.Event;
 
+import com.xpn.xwiki.XWikiContext;
+import com.xpn.xwiki.XWikiException;
 import com.xpn.xwiki.doc.XWikiDocument;
 import com.xpn.xwiki.objects.BaseObject;
 
@@ -62,6 +70,12 @@ public class XWikiDocumentStoreEventListener extends AbstractLocalEventListener
 
     @Inject
     private TaskManager taskManager;
+
+    @Inject
+    private Provider<XWikiContext> contextProvider;
+
+    @Inject
+    private Logger logger;
 
     @Inject
     @Named("withparameters")
@@ -111,6 +125,36 @@ public class XWikiDocumentStoreEventListener extends AbstractLocalEventListener
         } else {
             // Queue an indexing task. The task itself will determine if this document is actually part of a collection.
             this.taskManager.addTask(wiki, document.getId(), XWikiDocumentDocumentIndexingTaskConsumer.NAME);
+        }
+
+        // A translation that is created or deleted changes the translation locales indexed with the other language
+        // versions of the page (Document#getTranslationLocales()), so they are indexed again as well.
+        XWikiDocument changedVersion = event instanceof DocumentDeletedEvent ? originalDocument : document;
+        if (XWikiDocumentStoreHelper.isTranslation(changedVersion) && !(event instanceof DocumentUpdatedEvent)) {
+            queueOtherVersions(changedVersion, wiki);
+        }
+    }
+
+    private void queueOtherVersions(XWikiDocument changedVersion, String wiki)
+    {
+        DocumentReference reference = changedVersion.getDocumentReference();
+        XWikiContext context = this.contextProvider.get();
+        try {
+            XWikiDocument defaultDocument = context.getWiki().getDocument(reference, context);
+            // When the whole page is deleted, its translations are deleted before its default version: nothing to
+            // index again.
+            if (defaultDocument.isNew()) {
+                return;
+            }
+            List<Locale> versions = new ArrayList<>(defaultDocument.getTranslationLocales(context));
+            versions.add(Locale.ROOT);
+            versions.stream()
+                .filter(locale -> !locale.equals(changedVersion.getLocale()))
+                .forEach(locale -> this.taskManager.addTask(wiki, new XWikiDocument(reference, locale).getId(),
+                    XWikiDocumentDocumentIndexingTaskConsumer.NAME));
+        } catch (XWikiException e) {
+            this.logger.warn("Failed to queue the other language versions of [{}] for indexing: [{}]", reference,
+                ExceptionUtils.getRootCauseMessage(e));
         }
     }
 

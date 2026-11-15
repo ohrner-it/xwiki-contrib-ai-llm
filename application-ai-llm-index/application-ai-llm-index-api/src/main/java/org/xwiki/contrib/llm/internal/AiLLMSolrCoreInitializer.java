@@ -119,6 +119,22 @@ public class AiLLMSolrCoreInitializer extends AbstractSolrCoreInitializer
     public static final String FIELD_ERROR_MESSAGE = "errorMessage";
 
     /**
+     * The name of the field that tells whether the document of a chunk is a translation, see
+     * {@link org.xwiki.contrib.llm.Document#isTranslation()}.
+     *
+     * @since 1.0.2
+     */
+    public static final String FIELD_IS_TRANSLATION = "isTranslation";
+
+    /**
+     * The name of the field with the locales of the translations of the document of a chunk, see
+     * {@link org.xwiki.contrib.llm.Document#getTranslationLocales()}.
+     *
+     * @since 1.0.2
+     */
+    public static final String FIELD_TRANSLATIONS = "translations";
+
+    /**
      * The name of the field that stores the hint of the store of the collection.
      */
     public static final String FIELD_STORE_HINT = "storeHint";
@@ -141,7 +157,10 @@ public class AiLLMSolrCoreInitializer extends AbstractSolrCoreInitializer
     // The version that drops the chunks of wiki pages, see #cleanXWikiStoreChunks()
     private static final long XWIKI_STORE_CLEANUP_VERSION = 121000007;
 
-    private static final long CURRENT_VERSION = XWIKI_STORE_CLEANUP_VERSION;
+    // The version that introduces the translation fields; chunks get them when they are indexed again
+    private static final long TRANSLATIONS_VERSION = 121000008;
+
+    private static final long CURRENT_VERSION = TRANSLATIONS_VERSION;
 
     private static final String SOLR_DENSE_VECTOR_FIELD = "solr.DenseVectorField";
 
@@ -211,6 +230,11 @@ public class AiLLMSolrCoreInitializer extends AbstractSolrCoreInitializer
         if (cversion < CONTENT_INDEX_VERSION) {
             // Add another version of the text field, but indexed as regular text.
             this.setTextGeneralField(FIELD_CONTENT_INDEX, false, false);
+        }
+
+        if (cversion < TRANSLATIONS_VERSION) {
+            this.setBooleanField(FIELD_IS_TRANSLATION, false, false);
+            this.setStringField(FIELD_TRANSLATIONS, true, false);
         }
 
         if (!create) {
