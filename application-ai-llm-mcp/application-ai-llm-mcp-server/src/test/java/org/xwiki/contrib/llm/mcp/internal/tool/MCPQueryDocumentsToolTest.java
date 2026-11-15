@@ -832,6 +832,18 @@ class MCPQueryDocumentsToolTest extends AbstractMCPToolTest
             + "    match counts"), this.tool.getManPage());
     }
 
+    @Test
+    void manPageTellsHowToRecognizeAndAvoidWeakMatches()
+    {
+        // The text is reflowed freely: compare it with single spaces.
+        String manPage = this.tool.getManPage().replaceAll("\\s+", " ");
+
+        assertTrue(manPage.contains("oh-my-zsh searches for oh OR my OR zsh."), manPage);
+        assertTrue(manPage.contains("Quote such a term (\"oh-my-zsh\") to match its words only in that order"),
+            manPage);
+        assertTrue(manPage.contains("check that the title or snippet contains what you searched for"), manPage);
+    }
+
     // -------------------------------------------------------------------------
     // Hidden documents
     // -------------------------------------------------------------------------

@@ -351,6 +351,13 @@ public class MCPQueryDocumentsTool implements MCPTool
                 later pages may contain fewer results than expected. Unauthenticated callers get no
                 match counts: the footer only reports the viewable documents shown and a continue offset.
 
+                The words of a query are combined with OR, and a term with hyphens is split into words:
+                oh-my-zsh searches for oh OR my OR zsh. A search therefore almost always returns results,
+                even when nothing matches well. Quote such a term ("oh-my-zsh") to match its words only in
+                that order, and check that the title or snippet contains what you searched for before
+                relying on a result. Scores rank the results of one search; they cannot be compared across
+                searches or against a fixed value.
+
                 Each result's Language: line names its content language; a "(translation)" suffix marks
                 a translation row - read or edit it with its locale (get_document / edit_document
                 locale=...). The locale filter matches documents whose content is in that language
