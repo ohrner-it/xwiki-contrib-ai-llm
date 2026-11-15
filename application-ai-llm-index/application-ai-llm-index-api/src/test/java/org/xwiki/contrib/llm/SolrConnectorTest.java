@@ -297,6 +297,53 @@ class SolrConnectorTest
     }
 
     @Test
+    void keywordSearchQueriesTheTermsWithoutStopWordsInTheIndexedContent() throws Exception
+    {
+        when(this.queryResponse.getResults()).thenReturn(new SolrDocumentList());
+
+        this.solrConnector.keywordSearch("How do I install zsh?", List.of("col1"), 5);
+
+        SolrQuery query = capturedQuery();
+        assertEquals("install zsh", query.getQuery());
+        assertEquals("edismax", query.get("defType"));
+        assertEquals(AiLLMSolrCoreInitializer.FIELD_CONTENT_INDEX, query.get("qf"));
+        assertEquals(AiLLMSolrCoreInitializer.FIELD_CONTENT_INDEX, query.get("pf2"));
+        assertEquals("2", query.get("ps2"));
+        // No field queries: a term like "title:x" is searched in the content.
+        assertEquals("-*", query.get("uf"));
+    }
+
+    @Test
+    void keywordSearchLeavesOutTheStopWordsOfTheSearchLocaleRatherThanOfTheContextLocale() throws Exception
+    {
+        when(this.xcontext.getLocale()).thenReturn(Locale.FRENCH);
+        when(this.queryResponse.getResults()).thenReturn(new SolrDocumentList());
+
+        this.solrConnector.keywordSearch("Wie installiere ich the Software le", List.of("col1"), 5, Locale.GERMAN);
+
+        assertEquals("installiere Software le", capturedQuery().getQuery());
+    }
+
+    @Test
+    void keywordSearchWithoutLocaleLeavesOutTheStopWordsOfTheContextLocale() throws Exception
+    {
+        when(this.xcontext.getLocale()).thenReturn(Locale.FRENCH);
+        when(this.queryResponse.getResults()).thenReturn(new SolrDocumentList());
+
+        this.solrConnector.keywordSearch("Comment installer le logiciel with zsh", List.of("col1"), 5);
+
+        assertEquals("Comment installer logiciel zsh", capturedQuery().getQuery());
+    }
+
+    @Test
+    void keywordSearchOfOnlyStopWordsSearchesNothing() throws Exception
+    {
+        assertEquals(List.of(), this.solrConnector.keywordSearch("What is it?", List.of("col1"), 5));
+
+        verify(this.client, never()).query(any(SolrQuery.class), any(SolrRequest.METHOD.class));
+    }
+
+    @Test
     void keywordSearchAppliesLocaleAsFilterQueryNotInMainQuery() throws Exception
     {
         when(this.solrUtils.toCompleteFilterQueryString("fr")).thenReturn("escaped(fr)");
