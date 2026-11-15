@@ -59,9 +59,10 @@
 #set ($discard = $doc.use($object))
 #set ($editing = $xcontext.action == 'edit')
 #set ($modelType = "$!object.getValue('type')")
-## Properties that are only used for one type of model: contextSize is only read for large language models while the
-## embedding prefixes, the dimensions and the maximum parallelism are only read for embedding models.
-#set ($llmOnlyProperties = ['contextSize'])
+## Properties that are only used for one type of model: the context size and the reasoning effort are only read for
+## large language models while the embedding prefixes, the dimensions and the maximum parallelism are only read for
+## embedding models.
+#set ($llmOnlyProperties = ['contextSize', 'reasoningEffort'])
 #set ($embOnlyProperties = ['embeddingIndexPrefix', 'embeddingQueryPrefix', 'dimensions', 'maximumParallelism'])
 {{html wiki="true" clean="false"}}
 &lt;div class="xform llm-model-sheet"&gt;

@@ -49,6 +49,8 @@ public class ModelConfiguration
 
     private int contextSize;
 
+    private String reasoningEffort;
+
     private int maximumParallelism;
 
     private boolean allowGuests;
@@ -121,6 +123,15 @@ public class ModelConfiguration
     public int getContextSize()
     {
         return this.contextSize;
+    }
+
+    /**
+     * @return the reasoning effort to request from the provider, {@code null} to send none and leave it to the
+     *     client's request or the provider's default
+     */
+    public String getReasoningEffort()
+    {
+        return this.reasoningEffort;
     }
 
     /**
@@ -225,6 +236,14 @@ public class ModelConfiguration
     public void setContextSize(int contextSize)
     {
         this.contextSize = contextSize;
+    }
+
+    /**
+     * @param reasoningEffort the reasoning effort to request from the provider, {@code null} to send none
+     */
+    public void setReasoningEffort(String reasoningEffort)
+    {
+        this.reasoningEffort = reasoningEffort;
     }
 
     /**
