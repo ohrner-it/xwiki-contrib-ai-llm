@@ -31,7 +31,7 @@
   <author>xwiki:XWiki.Admin</author>
   <contentAuthor>xwiki:XWiki.Admin</contentAuthor>
   <version>1.1</version>
-  <title></title>
+  <title/>
   <comment/>
   <minorEdit>false</minorEdit>
   <syntaxId>xwiki/2.1</syntaxId>
@@ -46,6 +46,10 @@
   #set ($configObject = $configDoc.newObject($configClassName))
   #set ($discard = $configDoc.save('Created empty AI LLM configuration', true))
 #end
+#set ($discard = $xwiki.jsx.use('AI.Code.AIConfigSheet'))
+#set ($testButtonLabel = $services.localization.render('llm.config.test.button'))
+#set ($testingMessage = $services.localization.render('llm.config.test.testing'))
+#set ($errorMessage = $services.localization.render('llm.config.test.error'))
 {{html clean="false"}}
   &lt;form id="ai-llm-Config" method="post" action="$configDoc.getURL("save", "xredirect=$escapetool.url(${redirect})")" class="withLock xform"&gt;
     &lt;fieldset&gt;
@@ -53,6 +57,7 @@
         &lt;dt&gt;
           &lt;label for='ai-llm-Instances'&gt;$services.localization.render('llm.config.label')&lt;/label&gt;
           &lt;span class='xHint'&gt;$services.localization.render('llm.config.label.hint')&lt;/span&gt;
+          &lt;span class='xHint'&gt;$escapetool.xml($services.localization.render('llm.config.test.hint'))&lt;/span&gt;
         &lt;/dt&gt;
         &lt;dd&gt;
           &lt;br /&gt;
@@ -73,10 +78,17 @@
 
 #foreach($serverObject in $configDoc.getObjects($configClassName))
   #set ($deleteURL = $configDoc.getURL('objectremove', "form_token=$!{services.csrf.getToken()}&amp;classname=${escapetool.url($configClassName)}&amp;classid=${serverObject.number}&amp;xredirect=${escapetool.url($redirect)}"))
+  ## The test uses the saved configuration, which the REST resource finds by its saved name. The name is URL encoded,
+  ## so the URL contains no character that is special in the HTML or the wiki syntax.
+  #set ($serverName = "$!serverObject.getValue('Name')")
+  #set ($testURL = "${request.contextPath}/rest/wikis/$escapetool.url($services.wiki.currentWikiId)/aiLLM/v1/servers/$escapetool.url($serverName)/test")
+  #set ($testButtonId = "llm-server-test-${serverObject.number}")
+  ## The accessible name of the button is its label followed by the name of the server, taken from the name field.
+  #set ($nameFieldId = "${configClassName}_${serverObject.number}_Name")
 
 {{box}}
-|=$services.localization.render('llm.config.name')|=$services.localization.render('llm.config.url')|=$services.localization.render('llm.config.token')|=$services.localization.render('llm.config.requestmode')|=$services.localization.render('llm.config.delete')
-|$serverObject.display('Name', 'edit') |$serverObject.display('url', 'edit')|$serverObject.display('token', 'edit')|$serverObject.display('Requestmode', 'edit')|[[image:icon:cross&gt;&gt;path:$deleteURL]]
+|=$services.localization.render('llm.config.name')|=$services.localization.render('llm.config.url')|=$services.localization.render('llm.config.token')|=$services.localization.render('llm.config.requestmode')|={{translation key="llm.config.test"/}}|=$services.localization.render('llm.config.delete')
+|$serverObject.display('Name', 'edit') |$serverObject.display('url', 'edit')|$serverObject.display('token', 'edit')|$serverObject.display('Requestmode', 'edit')|#if ($serverName != ''){{html clean="false"}}&lt;button type="button" id="$testButtonId" class="btn btn-default llm-server-test" data-test-url="$escapetool.xml($testURL)" data-server-label="$escapetool.xml($services.localization.render('llm.config.test.server', [$serverName]))" data-testing-message="$escapetool.xml($testingMessage)" data-error-message="$escapetool.xml($errorMessage)" aria-labelledby="$testButtonId $escapetool.xml($nameFieldId)"&gt;$escapetool.xml($testButtonLabel)&lt;/button&gt;{{/html}}#end|[[image:icon:cross&gt;&gt;path:$deleteURL]]
 {{/box}}
 
 #end
@@ -94,4 +106,172 @@
   &lt;/form&gt;
 {{/html}}
 {{/velocity}}</content>
+  <object>
+    <name>AI.Code.AIConfigSheet</name>
+    <number>0</number>
+    <className>XWiki.JavaScriptExtension</className>
+    <guid>a6ea6efa-49a1-43ac-a0eb-7070a808756c</guid>
+    <class>
+      <name>XWiki.JavaScriptExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <defaultValue>long</defaultValue>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <freeText>forbidden</freeText>
+        <largeStorage>0</largeStorage>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <contenttype>PureText</contenttype>
+        <disabled>0</disabled>
+        <editor>PureText</editor>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <restricted>0</restricted>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <freeText>forbidden</freeText>
+        <largeStorage>0</largeStorage>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage|onDemand|always</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>long</cache>
+    </property>
+    <property>
+      <code>require(['jquery'], $ =&gt; {
+  'use strict';
+
+  // The last notification of each test button, replaced by the next one so that an outdated outcome does not stay.
+  const notifications = new WeakMap();
+
+  /**
+   * Show a notification about the test of a server, in place of the last one of its button.
+   *
+   * @param {HTMLButtonElement} button the test button of the server
+   * @param {string} message the message, plain text
+   * @param {string} type the notification type: inprogress, done or error
+   * @param {object} [options] the options of the notification, e.g. its timeout
+   */
+  function notify(button, message, type, options) {
+    const text = `${button.dataset.serverLabel} ${message}`;
+    // XWiki 17.10.9, and 18.4.0 and later, show the text of a notification as plain text and define textFormat;
+    // earlier versions show it as HTML.
+    const content = typeof XWiki.widgets.Notification.textFormat === 'function' ? text : text.escapeHTML();
+    const notification = new XWiki.widgets.Notification(content, type, {...options, inactive: true});
+    const last = notifications.get(button);
+    notifications.set(button, notification);
+    if (last) {
+      last.replace(notification);
+    } else {
+      notification.show();
+    }
+  }
+
+  /**
+   * Test the saved configuration of a server and show the outcome in a notification: a success for a few seconds, a
+   * failure until it is clicked, as it says what to correct.
+   *
+   * @param {HTMLButtonElement} button the test button, carrying the URL of the test and the messages it needs
+   */
+  async function testServer(button) {
+    // Not disabled while the test runs, as disabling the button would make it lose the keyboard focus.
+    if (button.getAttribute('aria-disabled') === 'true') {
+      return;
+    }
+    button.setAttribute('aria-disabled', 'true');
+    // Bootstrap styles the class, not the attribute.
+    button.classList.add('disabled');
+    try {
+      notify(button, button.dataset.testingMessage, 'inprogress');
+      // XWiki's xwiki.js adds the XWiki-Form-Token header to every same-origin fetch; setting it here too would send two
+      // tokens, which the server receives as one invalid, comma-joined value.
+      const response = await fetch(button.dataset.testUrl, {
+        method: 'POST',
+        headers: {'Accept': 'application/json'}
+      });
+      // Every answer of the test resource carries a message, refusals included.
+      const answer = await response.json();
+      if (answer.message &amp;&amp; answer.success === true) {
+        notify(button, answer.message, 'done', {timeout: 5});
+      } else {
+        notify(button, answer.message || button.dataset.errorMessage, 'error', {timeout: false});
+      }
+    } catch (error) {
+      console.error('Failed to test the AI server configuration.', error);
+      notify(button, button.dataset.errorMessage, 'error', {timeout: false});
+    } finally {
+      button.removeAttribute('aria-disabled');
+      button.classList.remove('disabled');
+    }
+  }
+
+  $(document).on('click', '.llm-server-test', event =&gt; testServer(event.currentTarget));
+});</code>
+    </property>
+    <property>
+      <name>Test the connection to an AI server</name>
+    </property>
+    <property>
+      <parse>0</parse>
+    </property>
+    <property>
+      <use>onDemand</use>
+    </property>
+  </object>
 </xwikidoc>

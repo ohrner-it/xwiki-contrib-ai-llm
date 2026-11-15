@@ -175,6 +175,17 @@ class OpenAIGPTAPIServerTest
     }
 
     @Test
+    void embedWithTokenThatCannotBeSent()
+    {
+        when(this.config.getToken()).thenReturn(TOKEN + "\r");
+
+        RequestError exception = assertThrows(RequestError.class, () -> this.server.embed(MODEL, List.of(INPUT)));
+        // The exception of the HTTP client quotes the header value, i.e. the token, so it must not be passed on.
+        assertEquals("500: The configured token contains characters that are not allowed in an HTTP header.",
+            exception.getMessage());
+    }
+
+    @Test
     void embedWithRejectedCredentials() throws Exception
     {
         String providerMessage = "Incorrect API key provided: sk-abc123";

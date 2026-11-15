@@ -12,9 +12,11 @@ org.xwiki.contrib.llm.internal.HttpClientFactory
 org.xwiki.contrib.llm.internal.ModelComponentFixer
 org.xwiki.contrib.llm.internal.RequestHelper
 org.xwiki.contrib.llm.internal.OpenAIGPTAPIServer
+org.xwiki.contrib.llm.internal.ServerConnectionTester
 org.xwiki.contrib.llm.internal.rest.DefaultChatCompletionsResource
 org.xwiki.contrib.llm.internal.rest.DefaultModelsResource
 org.xwiki.contrib.llm.internal.rest.DefaultPromptsResource
+org.xwiki.contrib.llm.internal.rest.DefaultServerTestResource
 org.xwiki.contrib.llm.script.AILLMScriptService
 org.xwiki.contrib.llm.script.ModelsScriptService
 org.xwiki.contrib.llm.GPTRestAPI
