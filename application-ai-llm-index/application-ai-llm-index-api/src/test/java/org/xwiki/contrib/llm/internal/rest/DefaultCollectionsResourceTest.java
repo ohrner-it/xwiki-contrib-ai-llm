@@ -24,6 +24,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.xwiki.contrib.llm.SolrConnector;
 import org.xwiki.contrib.llm.internal.AiLLMSolrCoreInitializer;
+import org.xwiki.contrib.llm.internal.CollectionAccessChecker;
 import org.xwiki.contrib.llm.internal.CurrentUserCollectionManager;
 import org.xwiki.contrib.llm.internal.WriteAttribution;
 import org.xwiki.model.reference.DocumentReference;
@@ -51,7 +52,7 @@ import static org.mockito.Mockito.when;
  * @version $Id$
  */
 @OldcoreTest
-@ComponentList({ CurrentUserCollectionManager.class })
+@ComponentList({ CurrentUserCollectionManager.class, CollectionAccessChecker.class })
 @ReferenceComponentList
 class DefaultCollectionsResourceTest
 {

@@ -41,6 +41,7 @@ import org.xwiki.contrib.llm.SolrConnector;
 import org.xwiki.contrib.llm.authorization.AuthorizationManager;
 import org.xwiki.contrib.llm.authorization.AuthorizationManagerBuilder;
 import org.xwiki.contrib.llm.internal.AiLLMSolrCoreInitializer;
+import org.xwiki.contrib.llm.internal.CollectionAccessChecker;
 import org.xwiki.contrib.llm.internal.CurrentUserCollection;
 import org.xwiki.contrib.llm.internal.CurrentUserCollectionManager;
 import org.xwiki.contrib.llm.internal.DefaultCollection;
@@ -117,7 +118,8 @@ import static org.mockito.Mockito.when;
     CurrentUserCollection.class,
     DefaultDocument.class,
     XWikiAuthorizationManagerBuilder.class,
-    WriteAttribution.class
+    WriteAttribution.class,
+    CollectionAccessChecker.class
 })
 
 @ReferenceComponentList

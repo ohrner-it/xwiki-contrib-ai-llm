@@ -100,7 +100,8 @@ import static org.mockito.Mockito.when;
     DefaultCollection.class,
     XWikiAuthorizationManagerBuilder.class,
     XWikiDocumentStoreHelper.class,
-    PublicAuthorizationManagerBuilder.class
+    PublicAuthorizationManagerBuilder.class,
+    CollectionAccessChecker.class
 })
 @ReferenceComponentList
 class DefaultCollectionManagerTest

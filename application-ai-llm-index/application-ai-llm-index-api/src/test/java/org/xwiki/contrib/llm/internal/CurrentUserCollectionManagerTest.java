@@ -64,7 +64,8 @@ import static org.mockito.Mockito.when;
 @OldcoreTest
 @ComponentList({
     DefaultCollection.class,
-    CurrentUserCollection.class
+    CurrentUserCollection.class,
+    CollectionAccessChecker.class
 })
 @ReferenceComponentList
 class CurrentUserCollectionManagerTest
