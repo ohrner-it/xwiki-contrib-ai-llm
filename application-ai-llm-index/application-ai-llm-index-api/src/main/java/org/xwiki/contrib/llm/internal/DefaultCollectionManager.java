@@ -41,6 +41,7 @@ import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.llm.Collection;
 import org.xwiki.contrib.llm.CollectionManager;
+import org.xwiki.contrib.llm.HybridSearchParameters;
 import org.xwiki.contrib.llm.IndexException;
 import org.xwiki.contrib.llm.SolrConnector;
 import org.xwiki.contrib.llm.authorization.AuthorizationManager;
@@ -244,14 +245,15 @@ public class DefaultCollectionManager implements CollectionManager
 
     @Override
     public List<Context> hybridSearch(String textQuery, List<String> collections, int limitSemanticSimilarity,
-        int limitKeywordSearch) throws IndexException
+        int limitKeywordSearch, Locale locale) throws IndexException
     {
-        return hybridSearch(textQuery, collections, limitSemanticSimilarity, limitKeywordSearch, null);
+        return hybridSearch(textQuery, collections,
+            new HybridSearchParameters(limitSemanticSimilarity, limitKeywordSearch, locale, 0));
     }
 
     @Override
-    public List<Context> hybridSearch(String textQuery, List<String> collections, int limitSemanticSimilarity,
-        int limitKeywordSearch, Locale locale) throws IndexException
+    public List<Context> hybridSearch(String textQuery, List<String> collections, HybridSearchParameters parameters)
+        throws IndexException
     {
         // A blank query has nothing to match: the semantic search would embed an empty text and the keyword search
         // would look for a literal empty or "null" term.
@@ -280,16 +282,20 @@ public class DefaultCollectionManager implements CollectionManager
 
         try {
             List<Context> semanticResults = this.solrConnector.similaritySearch(textQuery, collectionEmbeddingModelMap,
-                collectionStoreHintMap, limitSemanticSimilarity, locale);
+                collectionStoreHintMap, parameters.limitSemanticSimilarity(), parameters.locale());
             List<Context> keywordResults = this.solrConnector.keywordSearch(textQuery,
-                collectionStoreHintMap, limitKeywordSearch, locale);
+                collectionStoreHintMap, parameters.limitKeywordSearch(), parameters.locale());
 
             // The access decisions are computed once for both searches, then each list is filtered in its own order:
             // the position of a result in its list is what the fusion ranks on.
             Map<String, Map<String, Boolean>> viewableDocuments = getViewableDocuments(
                 Stream.concat(semanticResults.stream(), keywordResults.stream()), authorizationManagerMap);
+            // The minimum applies before the fusion: a chunk below it can still come from the keyword search.
+            List<Context> semanticResultsAboveMinimum = filterSearchResults(semanticResults, viewableDocuments).stream()
+                .filter(context -> context.similarityScore() >= parameters.minSemanticScore())
+                .toList();
 
-            return ReciprocalRankFusion.fuse(filterSearchResults(semanticResults, viewableDocuments),
+            return ReciprocalRankFusion.fuse(semanticResultsAboveMinimum,
                 filterSearchResults(keywordResults, viewableDocuments));
         } catch (SolrServerException e) {
             throw new IndexException("Failed to perform similarity search", e);

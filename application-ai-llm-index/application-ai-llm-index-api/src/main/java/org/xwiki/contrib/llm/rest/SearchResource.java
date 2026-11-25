@@ -27,6 +27,8 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.QueryParam;
 
+import org.xwiki.contrib.llm.CollectionManager;
+import org.xwiki.contrib.llm.HybridSearchParameters;
 import org.xwiki.contrib.llm.openai.Context;
 import org.xwiki.rest.XWikiRestException;
 import org.xwiki.stability.Unstable;
@@ -57,7 +59,11 @@ public interface SearchResource
      * @param locale the content language the returned chunks must be indexed under (exact match on the stored
      *     language field, e.g., {@code fr}), when empty all languages are searched (parameter available since
      *     0.10)
-     * @return a list of context chunks that are similar to the query
+     * @param minSemanticScore the minimum similarity score of a result of the semantic search, a number between 0 and 1
+     *     on the scale {@code (1 + cos) / 2} of the cosine similarity; when empty, there is no minimum (parameter
+     *     available since 1.0.2)
+     * @return a list of context chunks that are similar to the query, ordered and scored as described by
+     *     {@link CollectionManager#hybridSearch(String, List, HybridSearchParameters)}
      * @throws XWikiRestException if an error occurs
      */
     @POST
@@ -67,6 +73,7 @@ public interface SearchResource
         @QueryParam("collection") List<String> collections,
         @QueryParam("limitKeywordResults") @DefaultValue(DEFAULT_LIMIT) int limitKeywordResults,
         @QueryParam("limitSemanticResults") @DefaultValue(DEFAULT_LIMIT) int limitSemanticResults,
-        @QueryParam("locale") String locale
+        @QueryParam("locale") String locale,
+        @QueryParam("minSemanticScore") String minSemanticScore
     ) throws XWikiRestException;
 }

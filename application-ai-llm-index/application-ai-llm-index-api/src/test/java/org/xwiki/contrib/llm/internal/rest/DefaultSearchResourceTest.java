@@ -33,6 +33,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.xwiki.contrib.llm.CollectionManager;
+import org.xwiki.contrib.llm.HybridSearchParameters;
 import org.xwiki.contrib.llm.IndexException;
 import org.xwiki.contrib.llm.openai.Context;
 import org.xwiki.rest.XWikiRestException;
@@ -46,9 +47,6 @@ import com.xpn.xwiki.XWikiContext;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -95,13 +93,12 @@ class DefaultSearchResourceTest
     void searchWithoutLocaleForwardsNullLocaleAndRestoresWiki() throws XWikiRestException, IndexException
     {
         List<Context> results = List.of(new Context("col1", "doc1", null, null, "Some content", 0.9, null));
-        when(this.collectionManager.hybridSearch(eq(QUERY), eq(COLLECTIONS), anyInt(), anyInt(), isNull()))
+        when(this.collectionManager.hybridSearch(QUERY, COLLECTIONS, new HybridSearchParameters(3, 5, null, 0)))
             .thenReturn(results);
 
-        List<Context> actual = this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, null);
+        List<Context> actual = this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, null, null);
 
         assertEquals(results, actual);
-        verify(this.collectionManager).hybridSearch(eq(QUERY), eq(COLLECTIONS), anyInt(), anyInt(), isNull());
         // The search runs in the requested wiki and the previous wiki is restored afterwards.
         verify(this.context).setWikiId(WIKI);
         verify(this.context).setWikiId(MAIN_WIKI);
@@ -113,33 +110,33 @@ class DefaultSearchResourceTest
         // The REST parameter order is (limitKeywordResults, limitSemanticResults) while the manager's is
         // (limitSemanticSimilarity, limitKeywordSearch); the call passed them swapped from LLMAI-130
         // until LLMAI-163, silently letting the keyword budget drive the KNN topK and vice versa.
-        this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, null);
+        this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, null, null);
 
-        verify(this.collectionManager).hybridSearch(eq(QUERY), eq(COLLECTIONS), eq(3), eq(5), isNull());
+        verify(this.collectionManager).hybridSearch(QUERY, COLLECTIONS, new HybridSearchParameters(3, 5, null, 0));
     }
 
     @Test
     void searchWithBlankLocaleForwardsNullLocale() throws XWikiRestException, IndexException
     {
-        this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, "   ");
+        this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, "   ", null);
 
-        verify(this.collectionManager).hybridSearch(eq(QUERY), eq(COLLECTIONS), anyInt(), anyInt(), isNull());
+        verify(this.collectionManager).hybridSearch(QUERY, COLLECTIONS, new HybridSearchParameters(3, 5, null, 0));
     }
 
     @Test
     void searchWithValidLocaleForwardsParsedLocale() throws XWikiRestException, IndexException
     {
-        this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, "fr");
+        this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, "fr", null);
 
-        verify(this.collectionManager).hybridSearch(eq(QUERY), eq(COLLECTIONS), anyInt(), anyInt(),
-            eq(Locale.FRENCH));
+        verify(this.collectionManager).hybridSearch(QUERY, COLLECTIONS,
+            new HybridSearchParameters(3, 5, Locale.FRENCH, 0));
     }
 
     @Test
     void searchWithInvalidLocaleIsRejectedWithStatic400()
     {
         WebApplicationException exception = assertThrows(WebApplicationException.class,
-            () -> this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, "french"));
+            () -> this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, "french", null));
 
         assertEquals(400, exception.getResponse().getStatus());
         assertEquals(MediaType.TEXT_PLAIN_TYPE, exception.getResponse().getMediaType());
@@ -155,7 +152,7 @@ class DefaultSearchResourceTest
     void searchWithoutQueryIsRejectedWithStatic400(String query)
     {
         WebApplicationException exception = assertThrows(WebApplicationException.class,
-            () -> this.searchResource.search(WIKI, query, COLLECTIONS, 5, 3, null));
+            () -> this.searchResource.search(WIKI, query, COLLECTIONS, 5, 3, null, null));
 
         assertEquals(400, exception.getResponse().getStatus());
         assertEquals(MediaType.TEXT_PLAIN_TYPE, exception.getResponse().getMediaType());
@@ -171,12 +168,42 @@ class DefaultSearchResourceTest
         // "ca_ES_VALENCIA" parses as a valid locale but serializes to more than the 5 characters the wiki
         // ever stores, so it can only produce empty results and is rejected up front.
         WebApplicationException exception = assertThrows(WebApplicationException.class,
-            () -> this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, "ca_ES_VALENCIA"));
+            () -> this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, "ca_ES_VALENCIA", null));
 
         assertEquals(400, exception.getResponse().getStatus());
         assertEquals(MediaType.TEXT_PLAIN_TYPE, exception.getResponse().getMediaType());
         assertEquals("The locale parameter is longer than any stored locale (max 5 characters), use forms like"
             + " \"fr\" or \"pt_BR\".", exception.getResponse().getEntity());
+        verifyNoInteractions(this.collectionManager);
+    }
+
+    @Test
+    void searchForwardsTheMinimumSemanticScore() throws XWikiRestException, IndexException
+    {
+        this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, null, " 0.7 ");
+
+        verify(this.collectionManager).hybridSearch(QUERY, COLLECTIONS, new HybridSearchParameters(3, 5, null, 0.7));
+    }
+
+    @Test
+    void searchWithBlankMinimumSemanticScoreHasNoMinimum() throws XWikiRestException, IndexException
+    {
+        this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, null, "");
+
+        verify(this.collectionManager).hybridSearch(QUERY, COLLECTIONS, new HybridSearchParameters(3, 5, null, 0));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "1.5", "-0.1", "NaN", "high" })
+    void searchWithInvalidMinimumSemanticScoreIsRejectedWithStatic400(String minSemanticScore)
+    {
+        WebApplicationException exception = assertThrows(WebApplicationException.class,
+            () -> this.searchResource.search(WIKI, QUERY, COLLECTIONS, 5, 3, null, minSemanticScore));
+
+        assertEquals(400, exception.getResponse().getStatus());
+        assertEquals(MediaType.TEXT_PLAIN_TYPE, exception.getResponse().getMediaType());
+        assertEquals("The minSemanticScore parameter must be a number between 0 and 1.",
+            exception.getResponse().getEntity());
         verifyNoInteractions(this.collectionManager);
     }
 }

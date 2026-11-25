@@ -149,6 +149,36 @@ public interface CollectionManager
     }
 
     /**
+     * Perform a hybrid semantic similarity and keyword-based search, as
+     * {@link #hybridSearch(String, List, int, int, Locale)} with the limits and the content language of the given
+     * parameters. Results of the semantic search below the minimum semantic score are left out before the results
+     * are merged, so a chunk below it can still be found by the keyword search.
+     *
+     * <p>The default implementation supports no minimum semantic score: without one, it delegates to
+     * {@link #hybridSearch(String, List, int, int, Locale)}; implementations that support the minimum override it.</p>
+     *
+     * @param textQuery the text query
+     * @param collections the collections to search in
+     * @param parameters the limits, the content language and the minimum semantic score of the search
+     * @return the context chunks matching the query, best first, in the order of the fusion of the two searches and
+     *     not in the order of their {@code similarityScore}
+     * @throws IndexException if the search fails
+     * @throws UnsupportedOperationException in the default implementation, when the parameters have a minimum
+     *     semantic score
+     * @since 1.0.2
+     */
+    @Unstable
+    default List<Context> hybridSearch(String textQuery, List<String> collections, HybridSearchParameters parameters)
+        throws IndexException
+    {
+        if (parameters.minSemanticScore() > 0) {
+            throw new UnsupportedOperationException("This collection manager supports no minimum semantic score.");
+        }
+        return hybridSearch(textQuery, collections, parameters.limitSemanticSimilarity(),
+            parameters.limitKeywordSearch(), parameters.locale());
+    }
+
+    /**
      * @param collections the collections to filter
      * @return a list of collections that the user has access to
      */
